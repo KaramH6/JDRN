@@ -1,0 +1,44 @@
+{"ev": "tool_call", "node": "System", "payload": {"command": "Querying local Llama 3.2 model for intent..."}}
+{"ev": "classified", "node": "Llama 3.2", "payload": {"intent": "SCAN", "extracted": {"intent": "scan", "donor_clinic": null, "target_clinic": null, "drug": null, "quantity": 0}}}
+{"ev": "tool_call", "node": "InventoryMonitor", "payload": {"command": "data find --target clinics"}}
+{"ev": "tool_call", "node": "System", "payload": {"command": "Querying local Llama 3.2 model for intent..."}}
+{"ev": "classified", "node": "Llama 3.2", "payload": {"intent": "MANUAL", "extracted": {"intent": "manual", "donor_clinic": "Mafraq_Primary", "target_clinic": "Karak_Medical_Center", "drug": "Insulin_Glargine", "quantity": 50}}}
+{"ev": "proposed", "node": "Logistics", "payload": {"reason": "Manual dispatcher override.", "changes": [{"target": "Insulin_Glargine", "from": "Mafraq_Primary", "to": "Karak_Medical_Center"}]}}
+{"ev": "plan_parked", "node": "HITL Gate", "payload": {"gate_id": "BATCH-TRANS-101", "impact": "High (1 Relocations Pending)"}}
+{"ev": "tool_call", "node": "System", "payload": {"command": "Querying local Llama 3.2 model for intent..."}}
+{"ev": "classified", "node": "Llama 3.2", "payload": {"intent": "MANUAL", "extracted": {"intent": "manual", "donor_clinic": "Mafraq_Primary", "target_clinic": "Karak_Medical_Center", "drug": "Insulin_Glargine", "quantity": 50}}}
+{"ev": "proposed", "node": "Logistics", "payload": {"reason": "Manual dispatcher override.", "changes": [{"target": "Insulin_Glargine", "from": "Mafraq_Primary", "to": "Karak_Medical_Center"}]}}
+{"ev": "plan_decided", "node": "HITL Gate", "payload": {"outcome": "approve", "by": "Medical Dispatcher"}}
+{"ev": "tool_call", "node": "System", "payload": {"command": "Dispatching logistics vehicles...", "success": true}}
+{"ev": "tool_call", "node": "System", "payload": {"command": "Querying local Llama 3.2 model for intent..."}}
+{"ev": "classified", "node": "Llama 3.2", "payload": {"intent": "SCAN", "extracted": {"intent": "scan", "donor_clinic": "Mafraq_Primary", "target_clinic": "Zarqa_Central_Hub", "drug": "Infant_Formula_Specialized", "quantity": 0}}}
+{"ev": "tool_call", "node": "InventoryMonitor", "payload": {"command": "data find --target clinics"}}
+{"ev": "routed", "node": "Router", "payload": {"assignments": [{"domain": "Logistics Agent (3 shortages detected)"}]}}
+{"ev": "grounded", "node": "Logistics", "payload": {"query": "Surplus search for Insulin_Glargine needed at Amman_Main", "results": "Calculating optimal donor node..."}}
+{"ev": "proposed", "node": "Logistics", "payload": {"reason": "Preventing stockout at Amman_Main", "changes": [{"target": "Insulin_Glargine", "from": "Zarqa_Central_Hub", "to": "Amman_Main"}]}}
+{"ev": "grounded", "node": "Logistics", "payload": {"query": "Surplus search for Infant_Formula_Specialized needed at Karak_Medical_Center", "results": "Calculating optimal donor node..."}}
+{"ev": "proposed", "node": "Logistics", "payload": {"reason": "Preventing stockout at Karak_Medical_Center", "changes": [{"target": "Infant_Formula_Specialized", "from": "Zarqa_Central_Hub", "to": "Karak_Medical_Center"}]}}
+{"ev": "grounded", "node": "Logistics", "payload": {"query": "Surplus search for Insulin_Glargine needed at Karak_Medical_Center", "results": "Calculating optimal donor node..."}}
+{"ev": "proposed", "node": "Logistics", "payload": {"reason": "Preventing stockout at Karak_Medical_Center", "changes": [{"target": "Insulin_Glargine", "from": "Zarqa_Central_Hub", "to": "Karak_Medical_Center"}]}}
+{"ev": "plan_parked", "node": "HITL Gate", "payload": {"gate_id": "BATCH-TRANS-101", "impact": "High (3 Relocations Pending)"}}
+{"ev": "tool_call", "node": "System", "payload": {"command": "Querying local Llama 3.2 model for intent..."}}
+{"ev": "classified", "node": "Llama 3.2", "payload": {"intent": "SCAN", "extracted": {"intent": "scan", "donor_clinic": "Mafraq_Primary", "target_clinic": "Zarqa_Central_Hub", "drug": "Infant_Formula_Specialized", "quantity": 0}}}
+{"ev": "tool_call", "node": "InventoryMonitor", "payload": {"command": "data find --target clinics"}}
+{"ev": "routed", "node": "Router", "payload": {"assignments": [{"domain": "Logistics Agent (3 shortages detected)"}]}}
+{"ev": "grounded", "node": "Logistics", "payload": {"query": "Surplus search for Insulin_Glargine needed at Amman_Main", "results": "Calculating optimal donor node..."}}
+{"ev": "proposed", "node": "Logistics", "payload": {"reason": "Preventing stockout at Amman_Main", "changes": [{"target": "Insulin_Glargine", "from": "Zarqa_Central_Hub", "to": "Amman_Main"}]}}
+{"ev": "grounded", "node": "Logistics", "payload": {"query": "Surplus search for Infant_Formula_Specialized needed at Karak_Medical_Center", "results": "Calculating optimal donor node..."}}
+{"ev": "proposed", "node": "Logistics", "payload": {"reason": "Preventing stockout at Karak_Medical_Center", "changes": [{"target": "Infant_Formula_Specialized", "from": "Zarqa_Central_Hub", "to": "Karak_Medical_Center"}]}}
+{"ev": "grounded", "node": "Logistics", "payload": {"query": "Surplus search for Insulin_Glargine needed at Karak_Medical_Center", "results": "Calculating optimal donor node..."}}
+{"ev": "proposed", "node": "Logistics", "payload": {"reason": "Preventing stockout at Karak_Medical_Center", "changes": [{"target": "Insulin_Glargine", "from": "Zarqa_Central_Hub", "to": "Karak_Medical_Center"}]}}
+{"ev": "plan_decided", "node": "HITL Gate", "payload": {"outcome": "approve", "by": "Medical Dispatcher"}}
+{"ev": "tool_call", "node": "System", "payload": {"command": "Dispatching logistics vehicles...", "success": true}}
+{"ev": "tool_call", "node": "System", "payload": {"command": "Querying local Llama 3.2 model for intent..."}}
+{"ev": "classified", "node": "Llama 3.2", "payload": {"intent": "SCAN", "extracted": {"intent": "scan", "donor_clinic": null, "target_clinic": null, "drug": null, "quantity": 0}}}
+{"ev": "tool_call", "node": "InventoryMonitor", "payload": {"command": "data find --target clinics"}}
+{"ev": "tool_call", "node": "System", "payload": {"command": "Querying local Llama 3.2 model for intent..."}}
+{"ev": "classified", "node": "Llama 3.2", "payload": {"intent": "SCAN", "extracted": {"intent": "scan", "donor_clinic": null, "target_clinic": null, "drug": null, "quantity": 0}}}
+{"ev": "tool_call", "node": "InventoryMonitor", "payload": {"command": "data find --target clinics"}}
+{"ev": "tool_call", "node": "System", "payload": {"command": "Querying local Llama 3.2 model for intent..."}}
+{"ev": "classified", "node": "Llama 3.2", "payload": {"intent": "MANUAL", "extracted": {"intent": "manual", "donor_clinic": "Zarqa_Central_Hub", "target_clinic": "Amman_Main", "drug": "Insulin_Glargine", "quantity": 400}}}
+{"ev": "proposed", "node": "Logistics", "payload": {"reason": "Override REJECTED. Insufficient stock.", "changes": []}}

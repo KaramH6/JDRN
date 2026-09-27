@@ -1,0 +1,28 @@
+{"ev": "tool_call", "node": "System", "payload": {"command": "Analyzing user input intent"}}
+{"ev": "classified", "node": "Router", "payload": {"intent": "Autonomous System Scan"}}
+{"ev": "tool_call", "node": "InventoryMonitor", "payload": {"command": "data find --target clinics"}}
+{"ev": "routed", "node": "Router", "payload": {"assignments": [{"domain": "Logistics Agent (2 shortages detected)"}]}}
+{"ev": "grounded", "node": "Logistics", "payload": {"query": "Surplus search for Infant_Formula_Specialized needed at Mafraq_Primary", "results": "Calculating optimal donor node..."}}
+{"ev": "proposed", "node": "Logistics", "payload": {"reason": "Preventing stockout at Mafraq_Primary", "changes": [{"target": "Infant_Formula_Specialized", "from": "Zarqa_Central_Hub", "to": "Mafraq_Primary"}]}}
+{"ev": "grounded", "node": "Logistics", "payload": {"query": "Surplus search for Infant_Formula_Specialized needed at Karak_Medical_Center", "results": "Calculating optimal donor node..."}}
+{"ev": "proposed", "node": "Logistics", "payload": {"reason": "Preventing stockout at Karak_Medical_Center", "changes": [{"target": "Infant_Formula_Specialized", "from": "Zarqa_Central_Hub", "to": "Karak_Medical_Center"}]}}
+{"ev": "plan_parked", "node": "HITL Gate", "payload": {"gate_id": "BATCH-TRANS-101", "impact": "High (2 Relocations Pending)"}}
+{"ev": "tool_call", "node": "System", "payload": {"command": "Analyzing user input intent"}}
+{"ev": "classified", "node": "Router", "payload": {"intent": "Autonomous System Scan"}}
+{"ev": "tool_call", "node": "InventoryMonitor", "payload": {"command": "data find --target clinics"}}
+{"ev": "routed", "node": "Router", "payload": {"assignments": [{"domain": "Logistics Agent (2 shortages detected)"}]}}
+{"ev": "grounded", "node": "Logistics", "payload": {"query": "Surplus search for Infant_Formula_Specialized needed at Mafraq_Primary", "results": "Calculating optimal donor node..."}}
+{"ev": "proposed", "node": "Logistics", "payload": {"reason": "Preventing stockout at Mafraq_Primary", "changes": [{"target": "Infant_Formula_Specialized", "from": "Zarqa_Central_Hub", "to": "Mafraq_Primary"}]}}
+{"ev": "grounded", "node": "Logistics", "payload": {"query": "Surplus search for Infant_Formula_Specialized needed at Karak_Medical_Center", "results": "Calculating optimal donor node..."}}
+{"ev": "proposed", "node": "Logistics", "payload": {"reason": "Preventing stockout at Karak_Medical_Center", "changes": [{"target": "Infant_Formula_Specialized", "from": "Zarqa_Central_Hub", "to": "Karak_Medical_Center"}]}}
+{"ev": "plan_decided", "node": "HITL Gate", "payload": {"outcome": "approve", "by": "Medical Dispatcher"}}
+{"ev": "tool_call", "node": "System", "payload": {"command": "Dispatching logistics vehicles...", "success": true}}
+{"ev": "tool_call", "node": "System", "payload": {"command": "Analyzing user input intent"}}
+{"ev": "classified", "node": "Router", "payload": {"intent": "Manual Transfer Command"}}
+{"ev": "proposed", "node": "Logistics", "payload": {"reason": "Manual dispatcher override.", "changes": [{"target": "Infant_Formula_Specialized", "from": "Mafraq_Primary", "to": "Mafraq_Primary"}]}}
+{"ev": "plan_parked", "node": "HITL Gate", "payload": {"gate_id": "BATCH-TRANS-101", "impact": "High (1 Relocations Pending)"}}
+{"ev": "tool_call", "node": "System", "payload": {"command": "Analyzing user input intent"}}
+{"ev": "classified", "node": "Router", "payload": {"intent": "Manual Transfer Command"}}
+{"ev": "proposed", "node": "Logistics", "payload": {"reason": "Manual dispatcher override.", "changes": [{"target": "Infant_Formula_Specialized", "from": "Mafraq_Primary", "to": "Mafraq_Primary"}]}}
+{"ev": "plan_decided", "node": "HITL Gate", "payload": {"outcome": "approve", "by": "Medical Dispatcher"}}
+{"ev": "tool_call", "node": "System", "payload": {"command": "Dispatching logistics vehicles...", "success": true}}

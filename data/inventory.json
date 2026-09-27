@@ -1,0 +1,64 @@
+{
+  "clinics": {
+    "Mafraq_Primary": {
+      "location": "Mafraq",
+      "inventory": {
+        "Infant_Formula_Specialized": {
+          "quantity": 50,
+          "in_transit": 0,
+          "expiry": "2027-01-01"
+        },
+        "Insulin_Glargine": {
+          "quantity": 200,
+          "in_transit": 0,
+          "expiry": "2026-12-01"
+        }
+      }
+    },
+    "Zarqa_Central_Hub": {
+      "location": "Zarqa",
+      "inventory": {
+        "Infant_Formula_Specialized": {
+          "quantity": 400,
+          "in_transit": 0,
+          "expiry": "2026-11-15"
+        },
+        "Insulin_Glargine": {
+          "quantity": 200,
+          "in_transit": 0,
+          "expiry": "2027-05-01"
+        }
+      }
+    },
+    "Amman_Main": {
+      "location": "Amman",
+      "inventory": {
+        "Infant_Formula_Specialized": {
+          "quantity": 100,
+          "in_transit": 0,
+          "expiry": "2027-02-01"
+        },
+        "Insulin_Glargine": {
+          "quantity": 50,
+          "in_transit": 0,
+          "expiry": "2027-05-01"
+        }
+      }
+    },
+    "Karak_Medical_Center": {
+      "location": "Al-Karak",
+      "inventory": {
+        "Infant_Formula_Specialized": {
+          "quantity": 50,
+          "in_transit": 0,
+          "expiry": "2027-01-01"
+        },
+        "Insulin_Glargine": {
+          "quantity": 50,
+          "in_transit": 0,
+          "expiry": "2026-12-01"
+        }
+      }
+    }
+  }
+}

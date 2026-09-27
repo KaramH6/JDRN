@@ -1,0 +1,15 @@
+{"ev": "tool_call", "node": "InventoryMonitor", "payload": {"command": "data find --target clinics"}}
+{"ev": "classified", "node": "InventoryMonitor", "payload": {"intent": "Scan for anomalies", "needs_human": false}}
+{"ev": "routed", "node": "Router", "payload": {"assignments": [{"domain": "Logistics Agent"}]}}
+{"ev": "grounded", "node": "Logistics", "payload": {"query": "Surplus of Infant_Formula_Specialized near Mafraq_Primary", "results": "Scanning national vector DB..."}}
+{"ev": "proposed", "node": "Logistics", "payload": {"reason": "Preventing stockout at Mafraq_Primary", "changes": [{"target": "Infant_Formula_Specialized", "from": "Zarqa_Central_Hub", "to": "Mafraq_Primary"}]}}
+{"ev": "plan_parked", "node": "HITL Gate", "payload": {"gate_id": "TRANS-101", "impact": "High (Medication Relocation)"}}
+{"ev": "tool_call", "node": "InventoryMonitor", "payload": {"command": "data find --target clinics"}}
+{"ev": "classified", "node": "InventoryMonitor", "payload": {"intent": "Scan for anomalies", "needs_human": false}}
+{"ev": "routed", "node": "Router", "payload": {"assignments": [{"domain": "Logistics Agent"}]}}
+{"ev": "grounded", "node": "Logistics", "payload": {"query": "Surplus of Infant_Formula_Specialized near Mafraq_Primary", "results": "Scanning national vector DB..."}}
+{"ev": "proposed", "node": "Logistics", "payload": {"reason": "Preventing stockout at Mafraq_Primary", "changes": [{"target": "Infant_Formula_Specialized", "from": "Zarqa_Central_Hub", "to": "Mafraq_Primary"}]}}
+{"ev": "plan_decided", "node": "HITL Gate", "payload": {"outcome": "approve", "by": "Medical Dispatcher"}}
+{"ev": "tool_call", "node": "System", "payload": {"command": "data update --target inventory", "success": true}}
+{"ev": "tool_call", "node": "InventoryMonitor", "payload": {"command": "data find --target clinics"}}
+{"ev": "classified", "node": "InventoryMonitor", "payload": {"intent": "Scan for anomalies", "needs_human": false}}

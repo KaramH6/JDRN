@@ -1,0 +1,8 @@
+- in backend:
+uvicorn main:app --reload
+
+- in frontend:
+python -m http.server 3000
+
+- then in browser:
+http://localhost:3000

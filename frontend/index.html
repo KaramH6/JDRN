@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JDRN | Network Control</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        "base": "#ffffff",
+                        "ink": "#000000",
+                        "accent": "#f3f4f6", // very light gray for separation
+                        "alert": "#ef4444",
+                        "transit": "#f97316"
+                    },
+                    fontFamily: {
+                        "sans": ["Inter", "sans-serif"],
+                        "mono": ["JetBrains Mono", "monospace"]
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #fff; color: #000; }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #000; }
+        .hidden-view { display: none !important; }
+        /* Brutalist Loader */
+        .loader { border: 2px solid #000; width: 16px; height: 16px; animation: spin 1s linear infinite; border-top-color: transparent; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        /* Impeccable styling details */
+        .brutalist-border { border: 1px solid #000; }
+        .nav-active { background-color: #000; color: #fff; }
+        .nav-inactive { background-color: transparent; color: #000; }
+        .nav-inactive:hover { background-color: #f3f4f6; }
+    </style>
+</head>
+<body class="h-screen flex overflow-hidden selection:bg-black selection:text-white">
+
+    <!-- Strict Sidebar -->
+    <aside class="w-64 border-r border-black flex flex-col bg-base relative z-20">
+        <div class="p-6 border-b border-black">
+            <h1 class="font-bold text-2xl tracking-tighter uppercase">JDRN</h1>
+            <p class="text-[10px] font-mono uppercase mt-1 tracking-widest text-black/60">Logistics Node v1.0</p>
+        </div>
+        <nav class="flex-1 p-4 space-y-1">
+            <button onclick="switchView('dashboard')" id="nav-dashboard" class="w-full text-left px-4 py-3 font-mono text-sm font-bold uppercase transition-colors nav-active brutalist-border">
+                [1] Dashboard
+            </button>
+            <button onclick="switchView('agent')" id="nav-agent" class="w-full text-left px-4 py-3 font-mono text-sm font-bold uppercase transition-colors nav-inactive border border-transparent">
+                [2] Terminal
+            </button>
+        </nav>
+        <div class="p-6 border-t border-black">
+            <div class="flex items-center gap-2">
+                <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                <span class="text-xs font-mono uppercase">System Active</span>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Main Workspace -->
+    <main class="flex-1 flex flex-col relative bg-accent/30">
+        
+        <!-- View 1: Global Dashboard -->
+        <div id="view-dashboard" class="flex-1 flex flex-col h-full overflow-y-auto p-8 lg:p-12">
+            <div class="flex justify-between items-end mb-10 border-b border-black pb-4">
+                <div>
+                    <h2 class="text-4xl font-bold tracking-tight">Network Inventory</h2>
+                    <p class="text-sm font-mono text-black/60 mt-2 uppercase">Live tracking across peripheral hubs</p>
+                </div>
+                <button onclick="loadDashboardData()" class="px-6 py-2 text-sm font-mono font-bold uppercase brutalist-border hover:bg-black hover:text-white transition-colors">
+                    Refresh Data
+                </button>
+            </div>
+            
+            <div id="clinics-grid" class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+                <!-- Loader -->
+                <div class="col-span-full flex justify-center py-12"><div class="loader"></div></div>
+            </div>
+        </div>
+
+        <!-- View 2: Agent Terminal (No Bubbles) -->
+        <div id="view-agent" class="hidden-view flex-1 flex flex-col h-full relative bg-base">
+            <div id="chat-container" class="flex-1 overflow-y-auto px-8 lg:px-24 pt-12 pb-32">
+                <!-- Greeting -->
+                <div class="border-l-4 border-black pl-4 mb-10">
+                    <h3 class="font-bold text-xl uppercase tracking-tight">JDRN Early-Warning Routing Protocol</h3>
+                    <p class="text-sm font-mono mt-2">Connected to Hakeem local DB. Awaiting scan or transfer directives.</p>
+                </div>
+            </div>
+
+            <!-- Command Input -->
+            <div class="absolute bottom-0 w-full bg-base border-t border-black p-6">
+                <div class="max-w-5xl mx-auto relative">
+                    <form onsubmit="event.preventDefault(); sendMessage();" class="flex gap-4">
+                        <div class="flex-1 relative flex items-center">
+                            <span class="absolute left-4 font-mono font-bold text-black/50">></span>
+                            <input type="text" id="prompt-input" class="w-full bg-accent/50 brutalist-border pl-10 pr-4 py-4 focus:outline-none focus:bg-white font-mono text-sm" placeholder="Enter command (e.g., Scan for shortages)...">
+                        </div>
+                        <button type="submit" id="send-btn" class="bg-black text-white px-8 py-4 font-mono font-bold uppercase hover:bg-black/80 transition-colors">
+                            Send
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script src="renderer.js"></script>
+</body>
+</html>
