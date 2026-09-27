@@ -37,6 +37,7 @@ Wait for the download to finish and verify it says "success". You can type /bye 
 How to Run the System
 
 You will need to open two separate terminal windows to run the backend and frontend simultaneously.
+
 Step 1: Start the Backend (API & Agent)
 
 Open Terminal 1, navigate to the root of the JDRN project, and set up the Python environment:
@@ -61,6 +62,7 @@ uvicorn main:app --reload
 ```
 
 Leave this terminal open. It will show a continuous feed of the AI's internal processing logs.
+
 Step 2: Start the Frontend (User Interface)
 
 Open Terminal 2, navigate to the root of the JDRN project, and start the local web server:
