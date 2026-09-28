@@ -1,6 +1,114 @@
 const API_URL = "http://127.0.0.1:8000";
 let currentSessionId = 'jdrn-' + Date.now();
 let isProcessing = false; 
+let lastInventoryVersion = '';
+let demoInventory = {};
+let demoRunning = false;
+let demoTimer = null;
+
+function updateDemoMedicines() {
+    const branch = document.getElementById('demo-branch').value;
+    const drugSelect = document.getElementById('demo-drug');
+    const previous = drugSelect.value;
+    const medicines = Object.keys(demoInventory[branch]?.inventory || {});
+    drugSelect.replaceChildren(...medicines.map(drug => new Option(drug.replace(/_/g, ' '), drug)));
+    if (medicines.includes(previous)) drugSelect.value = previous;
+    else if (medicines.includes('Salbutamol_Inhaler')) drugSelect.value = 'Salbutamol_Inhaler';
+}
+
+function updateDemoControls() {
+    document.getElementById('demo-toggle').textContent = demoRunning ? 'Stop simulation' : 'Start simulation';
+    document.getElementById('demo-branch').disabled = demoRunning;
+    document.getElementById('demo-drug').disabled = demoRunning;
+    document.getElementById('demo-restock').disabled = demoRunning;
+}
+
+function stopDemandSimulation(message) {
+    demoRunning = false;
+    clearTimeout(demoTimer);
+    updateDemoControls();
+    document.getElementById('demo-status').textContent = message;
+}
+
+async function consumeDemoStock() {
+    if (!demoRunning) return;
+    const clinicId = document.getElementById('demo-branch').value;
+    const drug = document.getElementById('demo-drug').value;
+    try {
+        const response = await fetch(`${API_URL}/demo/consume`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({clinic_id: clinicId, drug})
+        });
+        if (!response.ok) throw new Error('Demand simulation request failed');
+        const result = await response.json();
+        await loadDashboardData();
+        if (!demoRunning) return;
+        if (result.quantity === 0) {
+            stopDemandSimulation(`${drug.replace(/_/g, ' ')} at ${clinicId.replace(/_/g, ' ')} reached zero. Review the alert and ask the agent for a plan.`);
+        } else {
+            document.getElementById('demo-status').textContent = `${clinicId.replace(/_/g, ' ')}: ${result.quantity} ${drug.replace(/_/g, ' ')} units remaining.`;
+            demoTimer = setTimeout(consumeDemoStock, 2000);
+        }
+    } catch (error) {
+        stopDemandSimulation('Simulation stopped: backend unavailable. Check the Python server.');
+    }
+}
+
+function toggleDemandSimulation() {
+    if (demoRunning) {
+        stopDemandSimulation('Simulation stopped. Current stock is saved.');
+        return;
+    }
+    if (!document.getElementById('demo-branch').value || !document.getElementById('demo-drug').value) return;
+    demoRunning = true;
+    updateDemoControls();
+    document.getElementById('demo-status').textContent = 'Simulating demand...';
+    consumeDemoStock();
+}
+
+async function restockDemoBranch() {
+    const clinicId = document.getElementById('demo-branch').value;
+    const drug = document.getElementById('demo-drug').value;
+    if (demoRunning || !clinicId || !drug) return;
+    try {
+        const response = await fetch(`${API_URL}/demo/restock`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({clinic_id: clinicId, drug})
+        });
+        if (!response.ok) throw new Error('Restock request failed');
+        document.getElementById('demo-status').textContent = `${clinicId.replace(/_/g, ' ')} restocked with 45 units of ${drug.replace(/_/g, ' ')} for another run.`;
+        loadDashboardData();
+    } catch (error) {
+        document.getElementById('demo-status').textContent = 'Restock failed. Check the Python server.';
+    }
+}
+
+function openShortageScan() {
+    switchView('agent');
+    promptInput.value = 'Scan for shortages in all branches';
+    promptInput.focus();
+}
+
+function renderShortageAlerts(shortages) {
+    const alertBox = document.getElementById('shortage-alerts');
+    const badge = document.getElementById('nav-alert-count');
+    badge.textContent = shortages.length;
+    badge.classList.toggle('hidden', shortages.length === 0);
+    alertBox.classList.toggle('hidden', shortages.length === 0);
+    if (!shortages.length) {
+        alertBox.innerHTML = '';
+        return;
+    }
+    const rows = shortages.map(item => `<li>${escapeHtml(item.clinic.replace(/_/g, ' '))}: ${escapeHtml(item.drug.replace(/_/g, ' '))} (0 available${item.inTransit ? `, ${item.inTransit} inbound` : ''})</li>`).join('');
+    alertBox.innerHTML = `<div class="brutalist-border border-alert bg-red-50 p-5">
+        <div class="flex flex-wrap items-center justify-between gap-4">
+            <div><h3 class="font-bold uppercase text-alert">${shortages.length} stockout${shortages.length === 1 ? '' : 's'} detected</h3>
+                <p class="text-xs font-mono mt-1">Review the affected sites, then ask the agent for a transfer plan.</p></div>
+            <button type="button" onclick="openShortageScan()" class="bg-black text-white px-4 py-2 font-mono text-xs font-bold uppercase">Review in terminal</button>
+        </div><ul class="mt-3 list-disc pl-5 text-sm font-mono space-y-1">${rows}</ul></div>`;
+}
 
 function switchView(viewName) {
     const dashView = document.getElementById('view-dashboard');
@@ -35,14 +143,34 @@ async function loadDashboardData() {
     
     try {
         const res = await fetch(`${API_URL}/inventory`);
+        if (!res.ok) throw new Error('Inventory API error');
         const data = await res.json();
-        
-        grid.innerHTML = '';
-        
-        if (data.clinics) {
-            for (const [key, clinic] of Object.entries(data.clinics)) {
+        if (!data.clinics) throw new Error('Inventory unavailable');
+        demoInventory = data.clinics;
+        const branchSelect = document.getElementById('demo-branch');
+        const selectedBranch = branchSelect.value;
+        const branches = Object.entries(data.clinics).filter(([, clinic]) => clinic.type === 'branch');
+        branchSelect.replaceChildren(...branches.map(([id]) => new Option(id.replace(/_/g, ' '), id)));
+        branchSelect.value = branches.some(([id]) => id === selectedBranch) ? selectedBranch : (branches.some(([id]) => id === 'Amman_East') ? 'Amman_East' : branches[0]?.[0] || '');
+        updateDemoMedicines();
+        const version = JSON.stringify(data.clinics);
+        if (version === lastInventoryVersion) return;
+        lastInventoryVersion = version;
+        const groups = {};
+        const shortages = [];
+        for (const [key, clinic] of Object.entries(data.clinics)) {
+            const region = clinic.location || 'Other';
+            (groups[region] ||= []).push([key, clinic]);
+            for (const [drug, details] of Object.entries(clinic.inventory || {})) {
+                if (details.quantity <= 0) shortages.push({clinic: key, drug, inTransit: details.in_transit || 0});
+            }
+        }
+        renderShortageAlerts(shortages);
+        grid.innerHTML = Object.entries(groups).map(([region, sites]) => {
+            sites.sort((a, b) => (a[1].type === 'hq' ? -1 : 1) - (b[1].type === 'hq' ? -1 : 1));
+            const cards = sites.map(([key, clinic]) => {
                 let inventoryHtml = '';
-                for (const [drug, details] of Object.entries(clinic.inventory)) {
+                for (const [drug, details] of Object.entries(clinic.inventory || {})) {
                     const isCritical = details.quantity <= 0;
                     const inTransitVal = details.in_transit || 0;
                     
@@ -54,7 +182,7 @@ async function loadDashboardData() {
                         
                     inventoryHtml += `
                         <div class="flex justify-between items-center py-3 border-t border-black/10">
-                            <span class="text-sm font-medium ${isCritical ? 'text-alert font-bold' : ''}">${drug.replace(/_/g, ' ')}</span>
+                            <span class="text-sm font-medium ${isCritical ? 'text-alert font-bold' : ''}">${escapeHtml(drug.replace(/_/g, ' '))}</span>
                             <div class="flex items-center">
                                 <span class="font-mono text-sm ${isCritical ? 'bg-alert text-white px-2 py-0.5' : ''}">${details.quantity}</span>
                                 ${inTransitBadge}
@@ -63,18 +191,20 @@ async function loadDashboardData() {
                     `;
                 }
 
-                grid.innerHTML += `
+                return `
                     <div class="bg-base brutalist-border p-6 flex flex-col justify-between">
                         <div class="mb-4">
-                            <h3 class="font-bold text-xl uppercase tracking-tight">${clinic.location}</h3>
-                            <p class="text-[10px] font-mono text-black/50 uppercase mt-1">NODE: ${key}</p>
+                            <h3 class="font-bold text-lg uppercase tracking-tight">${escapeHtml(key.replace(/_/g, ' '))}</h3>
+                            <p class="text-[10px] font-mono text-black/50 uppercase mt-1">${clinic.type === 'hq' ? 'MAIN STORAGE HQ' : 'BRANCH'}</p>
                         </div>
                         <div class="mt-auto">${inventoryHtml}</div>
                     </div>
                 `;
-            }
-        }
+            }).join('');
+            return `<section><h3 class="text-xl font-bold uppercase border-b border-black pb-2 mb-4">${escapeHtml(region)} · 1 HQ + ${sites.length - 1} branches</h3><div class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-4">${cards}</div></section>`;
+        }).join('');
     } catch (err) {
+        lastInventoryVersion = '';
         grid.innerHTML = `<div class="col-span-full font-mono text-alert uppercase border border-alert p-6 text-center">Connection Error: Uvicorn Offline</div>`;
     }
 }
@@ -271,3 +401,4 @@ window.submitAction = async function(btn, actionType) {
 }
 
 loadDashboardData();
+setInterval(loadDashboardData, 5000);

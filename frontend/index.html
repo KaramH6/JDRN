@@ -53,7 +53,7 @@
         </div>
         <nav class="flex-1 p-4 space-y-1">
             <button onclick="switchView('dashboard')" id="nav-dashboard" class="w-full text-left px-4 py-3 font-mono text-sm font-bold uppercase transition-colors nav-active brutalist-border">
-                [1] Dashboard
+                [1] Dashboard <span id="nav-alert-count" class="hidden ml-2 bg-alert text-white px-2 py-0.5 text-xs"></span>
             </button>
             <button onclick="switchView('agent')" id="nav-agent" class="w-full text-left px-4 py-3 font-mono text-sm font-bold uppercase transition-colors nav-inactive border border-transparent">
                 [2] Terminal
@@ -75,14 +75,32 @@
             <div class="flex justify-between items-end mb-10 border-b border-black pb-4">
                 <div>
                     <h2 class="text-4xl font-bold tracking-tight">Network Inventory</h2>
-                    <p class="text-sm font-mono text-black/60 mt-2 uppercase">Live tracking across peripheral hubs</p>
+                    <p class="text-sm font-mono text-black/60 mt-2 uppercase">Inventory refreshes every 5 seconds while the site is open</p>
                 </div>
                 <button onclick="loadDashboardData()" class="px-6 py-2 text-sm font-mono font-bold uppercase brutalist-border hover:bg-black hover:text-white transition-colors">
                     Refresh Data
                 </button>
             </div>
             
-            <div id="clinics-grid" class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+            <div class="brutalist-border bg-base p-5 mb-8">
+                <div class="flex flex-wrap items-end gap-4">
+                    <div class="mr-auto">
+                        <h3 class="font-bold uppercase">Demo mode: simulate demand</h3>
+                        <p class="text-xs font-mono text-black/60 mt-1">Consumes 15 units every 2 seconds until this branch reaches zero.</p>
+                    </div>
+                    <label class="text-xs font-mono uppercase">Branch
+                        <select id="demo-branch" onchange="updateDemoMedicines()" class="block brutalist-border bg-white p-2 mt-1 min-w-44"></select>
+                    </label>
+                    <label class="text-xs font-mono uppercase">Medicine
+                        <select id="demo-drug" class="block brutalist-border bg-white p-2 mt-1 min-w-44"></select>
+                    </label>
+                    <button type="button" id="demo-toggle" onclick="toggleDemandSimulation()" class="bg-black text-white px-4 py-2 font-mono text-xs font-bold uppercase">Start simulation</button>
+                    <button type="button" id="demo-restock" onclick="restockDemoBranch()" class="brutalist-border bg-white px-4 py-2 font-mono text-xs font-bold uppercase">Restock selected</button>
+                </div>
+                <p id="demo-status" class="text-xs font-mono mt-3" role="status" aria-live="polite">Select a branch and medicine to create a stockout during the demo.</p>
+            </div>
+            <div id="shortage-alerts" class="hidden mb-8" role="status" aria-live="polite"></div>
+            <div id="clinics-grid" class="space-y-10">
                 <!-- Loader -->
                 <div class="col-span-full flex justify-center py-12"><div class="loader"></div></div>
             </div>

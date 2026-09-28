@@ -156,6 +156,7 @@ def find_surplus(state: AgentState) -> AgentState:
     for item in shortages:
         clinic = item["clinic"]
         drug = item["drug"]
+        target_region = inventory["clinics"][clinic].get("location")
         
         emit_event(state["run_dir"], "grounded", "Logistics", {
             "query": f"Surplus search for {drug} needed at {clinic}",
@@ -163,16 +164,25 @@ def find_surplus(state: AgentState) -> AgentState:
         })
         
         best_donor = None
-        max_qty = 0
+        best_rank = None
         for donor_id, dstock in temp_stock.items():
             if donor_id == clinic:
                 continue
             cur_qty = dstock.get(drug, 0)
-            if cur_qty > max_qty:
-                max_qty = cur_qty
+            if cur_qty <= 0:
+                continue
+            donor = inventory["clinics"][donor_id]
+            rank = (
+                donor.get("location") == target_region,
+                donor.get("type") == "hq",
+                cur_qty,
+            )
+            if best_rank is None or rank > best_rank:
+                best_rank = rank
                 best_donor = donor_id
                 
-        if best_donor and max_qty > 0:
+        if best_donor:
+            max_qty = temp_stock[best_donor][drug]
             safe_surplus = max_qty - 50
             transfer_amount = min(50, safe_surplus) if safe_surplus > 0 else min(20, max_qty)
             if transfer_amount <= 0:

@@ -1,6 +1,14 @@
 # Jordan Drug Redistribution Network (JDRN)
 Jordan 2076 Hackathon
 
+## MVP stockout demo
+
+`data/inventory.json` contains four governorates (Amman, Zarqa, Mafraq, and Al-Karak). Each has one main storage HQ and three branches. The dashboard reads the file through the Python API every five seconds while the page is open. A stockout means `quantity` is `0` or below; `in_transit` is shown separately until a shipment is received.
+
+For the judging demo, open the dashboard and use **Demo mode: simulate demand**. Choose a branch and medicine, then click **Start simulation**. The backend consumes 15 units every two seconds and stops at zero. The dashboard will show a stockout notice and a **Review in terminal** button. In the terminal, submit the prefilled scan request, review the proposed transfers, and approve or reject them. Approval subtracts stock from the donor and adds it to the recipient's `in_transit`; click the recipient's **INBOUND** button to receive it. The stockout notice clears after receipt.
+
+Keep the backend and Ollama running during the demo. Use **Restock selected** to give the chosen branch medicine 45 units for another run. You can still edit `data/inventory.json` manually; changes are picked up on the next poll. Simulation changes are saved to that file. No external notification service is needed for this MVP.
+
 ## Conceptual Overview (Had men el proposal)
 
 **The Problem:** While Jordan allocates a significant portion of its GDP to healthcare, its medical supply chain suffers from a "last-mile" logistics gap[cite: 1]. Fragmented systems mean a central hospital in Amman or Zarqa might sit on surplus inventory while a rural clinic in Mafraq faces critical, life-threatening stockouts of sensitive items like insulin or specialized infant formula.

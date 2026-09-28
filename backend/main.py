@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import Optional, Dict, Any
 
-from fastapi import FastAPI # type: ignore
+from fastapi import FastAPI, HTTPException # type: ignore
 from fastapi.middleware.cors import CORSMiddleware # type: ignore
 from pydantic import BaseModel # type: ignore
 
@@ -31,6 +31,10 @@ class ActionRequest(BaseModel):
     decision: Any 
 
 class ReceiveRequest(BaseModel):
+    clinic_id: str
+    drug: str
+
+class DemandRequest(BaseModel):
     clinic_id: str
     drug: str
 
@@ -162,6 +166,45 @@ async def get_inventory():
         with open(db_path, "r", encoding="utf-8") as f:
             return json.load(f)
     return {"error": "Database not found"}
+
+@app.post("/demo/consume")
+async def simulate_demand(req: DemandRequest):
+    """Consume a fixed amount of branch stock for a repeatable local demo."""
+    db_path = Path(__file__).parent.parent / "data" / "inventory.json"
+    with open(db_path, "r", encoding="utf-8") as f:
+        inventory = json.load(f)
+
+    site = inventory.get("clinics", {}).get(req.clinic_id)
+    if not site or site.get("type") != "branch":
+        raise HTTPException(status_code=400, detail="Choose a valid branch")
+    stock = site.get("inventory", {}).get(req.drug)
+    if stock is None:
+        raise HTTPException(status_code=400, detail="Medicine not found at this branch")
+
+    stock["quantity"] = max(0, stock.get("quantity", 0) - 15)
+    with open(db_path, "w", encoding="utf-8") as f:
+        json.dump(inventory, f, indent=2)
+    return {"clinic_id": req.clinic_id, "drug": req.drug, "quantity": stock["quantity"]}
+
+@app.post("/demo/restock")
+async def restock_demo_branch(req: DemandRequest):
+    """Give one branch medicine a fresh starting quantity for another demo run."""
+    db_path = Path(__file__).parent.parent / "data" / "inventory.json"
+    with open(db_path, "r", encoding="utf-8") as f:
+        inventory = json.load(f)
+
+    site = inventory.get("clinics", {}).get(req.clinic_id)
+    if not site or site.get("type") != "branch":
+        raise HTTPException(status_code=400, detail="Choose a valid branch")
+    stock = site.get("inventory", {}).get(req.drug)
+    if stock is None:
+        raise HTTPException(status_code=400, detail="Medicine not found at this branch")
+
+    stock["quantity"] = 45
+    stock["in_transit"] = 0
+    with open(db_path, "w", encoding="utf-8") as f:
+        json.dump(inventory, f, indent=2)
+    return {"clinic_id": req.clinic_id, "drug": req.drug, "quantity": 45}
 
 @app.post("/receive")
 async def receive_shipment(req: ReceiveRequest):

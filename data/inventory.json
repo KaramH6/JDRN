@@ -1,40 +1,11 @@
 {
   "clinics": {
-    "Mafraq_Primary": {
-      "location": "Mafraq",
+    "Amman_Main": {
+      "location": "Amman",
+      "type": "hq",
       "inventory": {
         "Infant_Formula_Specialized": {
           "quantity": 50,
-          "in_transit": 0,
-          "expiry": "2027-01-01"
-        },
-        "Insulin_Glargine": {
-          "quantity": 200,
-          "in_transit": 0,
-          "expiry": "2026-12-01"
-        }
-      }
-    },
-    "Zarqa_Central_Hub": {
-      "location": "Zarqa",
-      "inventory": {
-        "Infant_Formula_Specialized": {
-          "quantity": 400,
-          "in_transit": 0,
-          "expiry": "2026-11-15"
-        },
-        "Insulin_Glargine": {
-          "quantity": 200,
-          "in_transit": 0,
-          "expiry": "2027-05-01"
-        }
-      }
-    },
-    "Amman_Main": {
-      "location": "Amman",
-      "inventory": {
-        "Infant_Formula_Specialized": {
-          "quantity": 100,
           "in_transit": 0,
           "expiry": "2027-02-01"
         },
@@ -42,11 +13,464 @@
           "quantity": 50,
           "in_transit": 0,
           "expiry": "2027-05-01"
+        },
+        "Amoxicillin": {
+          "quantity": 280,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Paracetamol": {
+          "quantity": 300,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Salbutamol_Inhaler": {
+          "quantity": 270,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Metformin": {
+          "quantity": 340,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        }
+      }
+    },
+    "Amman_North": {
+      "location": "Amman",
+      "type": "branch",
+      "inventory": {
+        "Infant_Formula_Specialized": {
+          "quantity": 41,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Insulin_Glargine": {
+          "quantity": 46,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Amoxicillin": {
+          "quantity": 51,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Paracetamol": {
+          "quantity": 56,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Salbutamol_Inhaler": {
+          "quantity": 61,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Metformin": {
+          "quantity": 66,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        }
+      }
+    },
+    "Amman_East": {
+      "location": "Amman",
+      "type": "branch",
+      "inventory": {
+        "Infant_Formula_Specialized": {
+          "quantity": 50,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Insulin_Glargine": {
+          "quantity": 55,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Amoxicillin": {
+          "quantity": 60,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Paracetamol": {
+          "quantity": 65,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Salbutamol_Inhaler": {
+          "quantity": 32,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Metformin": {
+          "quantity": 75,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        }
+      }
+    },
+    "Amman_South": {
+      "location": "Amman",
+      "type": "branch",
+      "inventory": {
+        "Infant_Formula_Specialized": {
+          "quantity": 59,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Insulin_Glargine": {
+          "quantity": 64,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Amoxicillin": {
+          "quantity": 69,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Paracetamol": {
+          "quantity": 74,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Salbutamol_Inhaler": {
+          "quantity": 79,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Metformin": {
+          "quantity": 84,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        }
+      }
+    },
+    "Zarqa_Central_Hub": {
+      "location": "Zarqa",
+      "type": "hq",
+      "inventory": {
+        "Infant_Formula_Specialized": {
+          "quantity": 350,
+          "in_transit": 0,
+          "expiry": "2026-11-15"
+        },
+        "Insulin_Glargine": {
+          "quantity": 200,
+          "in_transit": 0,
+          "expiry": "2027-05-01"
+        },
+        "Amoxicillin": {
+          "quantity": 280,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Paracetamol": {
+          "quantity": 300,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Salbutamol_Inhaler": {
+          "quantity": 320,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Metformin": {
+          "quantity": 340,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        }
+      }
+    },
+    "Zarqa_New": {
+      "location": "Zarqa",
+      "type": "branch",
+      "inventory": {
+        "Infant_Formula_Specialized": {
+          "quantity": 41,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Insulin_Glargine": {
+          "quantity": 46,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Amoxicillin": {
+          "quantity": 51,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Paracetamol": {
+          "quantity": 56,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Salbutamol_Inhaler": {
+          "quantity": 61,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Metformin": {
+          "quantity": 66,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        }
+      }
+    },
+    "Russeifa": {
+      "location": "Zarqa",
+      "type": "branch",
+      "inventory": {
+        "Infant_Formula_Specialized": {
+          "quantity": 50,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Insulin_Glargine": {
+          "quantity": 55,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Amoxicillin": {
+          "quantity": 60,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Paracetamol": {
+          "quantity": 65,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Salbutamol_Inhaler": {
+          "quantity": 70,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Metformin": {
+          "quantity": 75,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        }
+      }
+    },
+    "Hashemiya": {
+      "location": "Zarqa",
+      "type": "branch",
+      "inventory": {
+        "Infant_Formula_Specialized": {
+          "quantity": 59,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Insulin_Glargine": {
+          "quantity": 64,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Amoxicillin": {
+          "quantity": 69,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Paracetamol": {
+          "quantity": 74,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Salbutamol_Inhaler": {
+          "quantity": 79,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Metformin": {
+          "quantity": 84,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        }
+      }
+    },
+    "Mafraq_HQ": {
+      "location": "Mafraq",
+      "type": "hq",
+      "inventory": {
+        "Infant_Formula_Specialized": {
+          "quantity": 240,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Insulin_Glargine": {
+          "quantity": 260,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Amoxicillin": {
+          "quantity": 230,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Paracetamol": {
+          "quantity": 300,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Salbutamol_Inhaler": {
+          "quantity": 320,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Metformin": {
+          "quantity": 340,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        }
+      }
+    },
+    "Mafraq_Primary": {
+      "location": "Mafraq",
+      "type": "branch",
+      "inventory": {
+        "Infant_Formula_Specialized": {
+          "quantity": 50,
+          "in_transit": 0,
+          "expiry": "2027-01-01"
+        },
+        "Insulin_Glargine": {
+          "quantity": 200,
+          "in_transit": 0,
+          "expiry": "2026-12-01"
+        },
+        "Amoxicillin": {
+          "quantity": 51,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Paracetamol": {
+          "quantity": 56,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Salbutamol_Inhaler": {
+          "quantity": 61,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Metformin": {
+          "quantity": 66,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        }
+      }
+    },
+    "Mafraq_North": {
+      "location": "Mafraq",
+      "type": "branch",
+      "inventory": {
+        "Infant_Formula_Specialized": {
+          "quantity": 50,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Insulin_Glargine": {
+          "quantity": 55,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Amoxicillin": {
+          "quantity": 35,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Paracetamol": {
+          "quantity": 65,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Salbutamol_Inhaler": {
+          "quantity": 70,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Metformin": {
+          "quantity": 75,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        }
+      }
+    },
+    "Mafraq_East": {
+      "location": "Mafraq",
+      "type": "branch",
+      "inventory": {
+        "Infant_Formula_Specialized": {
+          "quantity": 59,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Insulin_Glargine": {
+          "quantity": 64,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Amoxicillin": {
+          "quantity": 69,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Paracetamol": {
+          "quantity": 74,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Salbutamol_Inhaler": {
+          "quantity": 79,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Metformin": {
+          "quantity": 84,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        }
+      }
+    },
+    "Karak_HQ": {
+      "location": "Al-Karak",
+      "type": "hq",
+      "inventory": {
+        "Infant_Formula_Specialized": {
+          "quantity": 240,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Insulin_Glargine": {
+          "quantity": 260,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Amoxicillin": {
+          "quantity": 280,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Paracetamol": {
+          "quantity": 300,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Salbutamol_Inhaler": {
+          "quantity": 320,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Metformin": {
+          "quantity": 340,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
         }
       }
     },
     "Karak_Medical_Center": {
       "location": "Al-Karak",
+      "type": "branch",
       "inventory": {
         "Infant_Formula_Specialized": {
           "quantity": 50,
@@ -57,6 +481,98 @@
           "quantity": 50,
           "in_transit": 0,
           "expiry": "2026-12-01"
+        },
+        "Amoxicillin": {
+          "quantity": 51,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Paracetamol": {
+          "quantity": 56,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Salbutamol_Inhaler": {
+          "quantity": 61,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Metformin": {
+          "quantity": 66,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        }
+      }
+    },
+    "Mutah": {
+      "location": "Al-Karak",
+      "type": "branch",
+      "inventory": {
+        "Infant_Formula_Specialized": {
+          "quantity": 50,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Insulin_Glargine": {
+          "quantity": 55,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Amoxicillin": {
+          "quantity": 60,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Paracetamol": {
+          "quantity": 65,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Salbutamol_Inhaler": {
+          "quantity": 70,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Metformin": {
+          "quantity": 75,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        }
+      }
+    },
+    "Qasr": {
+      "location": "Al-Karak",
+      "type": "branch",
+      "inventory": {
+        "Infant_Formula_Specialized": {
+          "quantity": 59,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Insulin_Glargine": {
+          "quantity": 64,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Amoxicillin": {
+          "quantity": 69,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Paracetamol": {
+          "quantity": 74,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Salbutamol_Inhaler": {
+          "quantity": 79,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
+        },
+        "Metformin": {
+          "quantity": 84,
+          "in_transit": 0,
+          "expiry": "2027-12-31"
         }
       }
     }
