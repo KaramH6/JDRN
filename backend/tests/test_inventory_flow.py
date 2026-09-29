@@ -190,6 +190,18 @@ class InventoryFlowTests(unittest.TestCase):
         self.assertTrue(result["is_parked"])
         self.assertIn("Paracetamol", result["detail"]["deliverables"][0]["title"])
 
+    def test_inventory_shortage_request_is_not_rewritten_as_medicine_lookup(self):
+        parsed = json.dumps({
+            "intent": "scan", "scope": "inventory_query", "lookup_type": "total_branch_stock",
+            "drug": None, "quantity": 0, "response": "",
+        })
+        with patch.object(agent, "current_llm", return_value=SimpleNamespace(invoke=lambda _: SimpleNamespace(content=parsed))):
+            result = self.client.post("/chat", json={
+                "message": "all the entire inventory for shortages",
+            }).json()
+        self.assertTrue(result["is_parked"])
+        self.assertIn("Paracetamol", result["detail"]["deliverables"][0]["title"])
+
     def test_ambiguous_transfer_asks_for_missing_details(self):
         parsed = json.dumps({
             "intent": "lookup", "scope": "inventory_query", "lookup_type": "max_branch_stock",

@@ -230,6 +230,9 @@ def analyze_request(state: AgentState) -> AgentState:
         if intent == "lookup" and re.search(r"\b(total|overall|combined|all types|all medicines|all drugs)\b", normalized_request) and not named_drug:
             parsed["lookup_type"] = "max_branch_total"
             parsed["drug"] = None
+        if (re.search(r"\bshortages?\b", normalized_request)
+                and re.search(r"\b(all|entire|inventory|branches|network)\b", normalized_request)):
+            intent = "scan"
         
         emit_event(state["run_dir"], "classified", "Llama 3.2", {
             "intent": intent.upper(),
