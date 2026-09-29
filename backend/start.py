@@ -7,11 +7,7 @@ import subprocess
 import sys
 import time
 
-from ollama_setup import OLLAMA_MODEL, probe_ollama
-
-
-PRIMARY_URL = "http://127.0.0.1:11434"
-JDRN_URL = "http://127.0.0.1:11435"
+from ollama_setup import JDRN_URL, OLLAMA_MODEL, PRIMARY_URL, probe_ollama
 
 
 def choose_ollama_server():
@@ -63,9 +59,10 @@ def choose_ollama_server():
 
 
 def main():
+    port = int(os.getenv("JDRN_BACKEND_PORT", "8000"))
     with socket.socket() as check:
-        if check.connect_ex(("127.0.0.1", 8000)) == 0:
-            print("JDRN startup: port 8000 already has a backend running. Stop the old uvicorn terminal, then run python start.py.", file=sys.stderr)
+        if check.connect_ex(("127.0.0.1", port)) == 0:
+            print(f"JDRN startup: port {port} already has a backend running. Stop the old uvicorn terminal, then run python start.py.", file=sys.stderr)
             return 1
     try:
         url, process = choose_ollama_server()
@@ -77,7 +74,7 @@ def main():
     print(f"JDRN: using {OLLAMA_MODEL} at {url}", flush=True)
     try:
         import uvicorn
-        uvicorn.run("main:app", host="127.0.0.1", port=8000)
+        uvicorn.run("main:app", host="127.0.0.1", port=port)
     finally:
         if process is not None and process.poll() is None:
             process.terminate()

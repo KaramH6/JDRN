@@ -44,7 +44,7 @@ Stop any backend already running on port 8000 before using the launcher. A previ
 
 If the launcher reports a missing model, run `ollama list` and check `echo $env:OLLAMA_MODELS`. Typing `ollama` alone starts the CLI but does not confirm that the serving process sees `llama3.2`. Set `OLLAMA_MODELS` to the folder that contains the `manifests` and `blobs` directories, restart the Ollama app, or use `ollama pull llama3.2` to download the model into the server's active folder. On Windows, changing this variable requires restarting the Ollama tray app; see [Ollama's Windows instructions](https://github.com/ollama/ollama/blob/main/docs/windows.mdx).
 
-To use a different server or model, set `JDRN_OLLAMA_URL` or `JDRN_OLLAMA_MODEL` before running `python start.py`. If you launch with `uvicorn main:app --reload` directly, the launcher checks do not run. The page loads Tailwind and fonts from CDNs, so styling needs internet access unless those assets are hosted locally.
+To use a different server or model, set `JDRN_OLLAMA_URL` or `JDRN_OLLAMA_MODEL` before running `python start.py`. A direct `uvicorn main:app --reload` launch can use an already running model-ready local server, but it will not start the JDRN server on port 11435. The page loads Tailwind and fonts from CDNs, so styling needs internet access unless those assets are hosted locally.
 Restart `python start.py` after editing backend code; the launcher does not use auto-reload.
 
 ## How the pieces fit

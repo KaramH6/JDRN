@@ -45,3 +45,5 @@ The JSON file and in-memory ticket store support one local backend process. A re
 ## Ollama startup follow-up
 
 The natural-language terminal previously reported every Ollama failure as “cannot reach Llama 3.2.” A running server with the wrong model directory produced the same message as a stopped server. The backend launcher now checks the model list, uses a server that exposes `llama3.2`, or starts a local JDRN server on port 11435 using `OLLAMA_MODELS`. `GET /ollama/status` feeds the sidebar, and terminal failures show whether the server is offline, the model is missing, or a response could not be parsed. The exact network scan command runs through the existing deterministic inventory workflow without Ollama.
+
+The first launcher version still cached port 11434 because it imported the Ollama configuration before choosing port 11435. Server selection is now read at runtime, and the agent refreshes its Ollama client when the selected URL changes. A regression test covers this ordering, and a live `python start.py` run reported `Ollama is ready with llama3.2` on the model-ready server.

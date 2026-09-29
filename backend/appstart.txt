@@ -1,4 +1,4 @@
-- in backend (recommended, checks/starts Ollama with the installed model):
+- stop any old backend terminal with Ctrl+C, then in backend:
 python start.py
 
 - if the launcher says the model is missing, check `ollama list` and `OLLAMA_MODELS`;

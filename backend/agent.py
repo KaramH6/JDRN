@@ -8,7 +8,7 @@ from langchain_core.messages import HumanMessage # type: ignore
 
 from inventory_logic import DONOR_RESERVE, collect_alerts, propose_transfers, validate_transfer
 from inventory_store import read_inventory, update_inventory
-from ollama_setup import OLLAMA_MODEL, OLLAMA_URL, probe_ollama
+from ollama_setup import OLLAMA_MODEL, get_ollama_url, probe_ollama
 
 class AgentState(TypedDict):
     session_id: str
@@ -31,8 +31,18 @@ def emit_event(run_dir: str, ev: str, node: str, payload: dict):
 def load_db() -> Dict[str, Any]:
     return read_inventory()
 
-# The launcher selects a server with the installed model and passes its URL here.
-llm = ChatOllama(model=OLLAMA_MODEL, base_url=OLLAMA_URL, temperature=0.0, format="json")
+# The server can become available after import, so refresh the client when its URL changes.
+llm_url = get_ollama_url()
+llm = ChatOllama(model=OLLAMA_MODEL, base_url=llm_url, temperature=0.0, format="json")
+
+
+def current_llm():
+    global llm, llm_url
+    url = get_ollama_url()
+    if url != llm_url:
+        llm = ChatOllama(model=OLLAMA_MODEL, base_url=url, temperature=0.0, format="json")
+        llm_url = url
+    return llm
 
 SCAN_COMMANDS = {
     "scan", "scan all branches", "scan for shortages",
@@ -82,7 +92,7 @@ def analyze_request(state: AgentState) -> AgentState:
     """
     
     try:
-        response = llm.invoke([HumanMessage(content=prompt)])
+        response = current_llm().invoke([HumanMessage(content=prompt)])
         content = response.content.strip()
         if content.startswith("```json"):
             content = content.replace("```json", "").replace("```", "").strip()
@@ -98,7 +108,7 @@ def analyze_request(state: AgentState) -> AgentState:
         })
         
     except Exception as e:
-        health = probe_ollama(OLLAMA_URL, OLLAMA_MODEL)
+        health = probe_ollama(get_ollama_url(), OLLAMA_MODEL)
         if health["state"] == "ready":
             explanation = f"Ollama is reachable, but could not interpret this request: {e}"
         else:

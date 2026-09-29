@@ -158,7 +158,7 @@ class InventoryFlowTests(unittest.TestCase):
             "target_clinic": "Amman_East", "drug": "Salbutamol_Inhaler",
             "quantity": 20,
         })
-        with patch.object(agent, "llm", SimpleNamespace(invoke=lambda _: SimpleNamespace(content=parsed))):
+        with patch.object(agent, "current_llm", return_value=SimpleNamespace(invoke=lambda _: SimpleNamespace(content=parsed))):
             ticket = self.client.post("/chat", json={"message": "Transfer 20 inhalers"}).json()
         self.assertTrue(ticket["is_parked"])
         self.assertEqual(self.decide(ticket["session_id"]).status_code, 200)
@@ -171,14 +171,13 @@ class InventoryFlowTests(unittest.TestCase):
             "target_clinic": "Amman_East", "drug": "Salbutamol_Inhaler",
             "quantity": 201,
         })
-        with patch.object(agent, "llm", SimpleNamespace(invoke=lambda _: SimpleNamespace(content=parsed))):
+        with patch.object(agent, "current_llm", return_value=SimpleNamespace(invoke=lambda _: SimpleNamespace(content=parsed))):
             rejected = self.client.post("/chat", json={"message": "Transfer too much"}).json()
         self.assertFalse(rejected["is_parked"])
         self.assertIn("Transfer declined", rejected["text"])
 
     def test_network_scan_works_without_ollama(self):
-        unavailable = SimpleNamespace(invoke=lambda _: (_ for _ in ()).throw(RuntimeError("Ollama should not be called")))
-        with patch.object(agent, "llm", unavailable):
+        with patch.object(agent, "current_llm", side_effect=RuntimeError("Ollama should not be called")):
             result = self.client.post("/chat", json={"message": "Scan for shortages in all branches"})
         self.assertEqual(result.status_code, 200)
         self.assertTrue(result.json()["is_parked"])
@@ -189,7 +188,7 @@ class InventoryFlowTests(unittest.TestCase):
         with patch.object(main, "probe_ollama", return_value=missing):
             self.assertEqual(self.client.get("/ollama/status").json(), missing)
         unavailable = SimpleNamespace(invoke=lambda _: (_ for _ in ()).throw(RuntimeError("model not found (404)")))
-        with patch.object(agent, "llm", unavailable), patch.object(agent, "probe_ollama", return_value=missing):
+        with patch.object(agent, "current_llm", return_value=unavailable), patch.object(agent, "probe_ollama", return_value=missing):
             result = self.client.post("/chat", json={"message": "Transfer 20 inhalers"}).json()
         self.assertFalse(result["is_parked"])
         self.assertEqual(result["text"], missing["message"])
@@ -206,6 +205,20 @@ class InventoryFlowTests(unittest.TestCase):
             self.assertEqual(ollama_setup.probe_ollama("http://127.0.0.1:11434")["state"], "model_missing")
         with patch.object(ollama_setup, "urlopen", side_effect=OSError("connection refused")):
             self.assertEqual(ollama_setup.probe_ollama("http://127.0.0.1:11434")["state"], "offline")
+
+    def test_runtime_ollama_url_reaches_status_and_client_after_import(self):
+        selected = "http://127.0.0.1:11435"
+        previous_client, previous_url = agent.llm, agent.llm_url
+        self.addCleanup(setattr, agent, "llm", previous_client)
+        self.addCleanup(setattr, agent, "llm_url", previous_url)
+        with patch.dict(os.environ, {"JDRN_OLLAMA_URL": selected}):
+            with patch.object(main, "probe_ollama", return_value={"state": "ready", "message": "ready"}) as probe:
+                self.assertEqual(self.client.get("/ollama/status").json()["state"], "ready")
+                probe.assert_called_once_with(selected, ollama_setup.OLLAMA_MODEL)
+            agent.llm_url = "http://127.0.0.1:11434"
+            with patch.object(agent, "ChatOllama", return_value=object()) as build:
+                agent.current_llm()
+                self.assertEqual(build.call_args.kwargs["base_url"], selected)
 
 
 if __name__ == "__main__":
