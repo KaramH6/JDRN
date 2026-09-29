@@ -41,3 +41,7 @@ The AI component interprets free-text terminal requests through local Ollama. Th
 ## Practical limits
 
 The JSON file and in-memory ticket store support one local backend process. A restart loses pending tickets, and multiple backend workers need a shared transactional database. The 30/45/50 unit values are demo policy, not clinically validated thresholds. Expiry, actual travel distance, live facility feeds, roles, and audit-grade identity are outside this MVP. Frontend CDN assets need internet for full styling.
+
+## Ollama startup follow-up
+
+The natural-language terminal previously reported every Ollama failure as “cannot reach Llama 3.2.” A running server with the wrong model directory produced the same message as a stopped server. The backend launcher now checks the model list, uses a server that exposes `llama3.2`, or starts a local JDRN server on port 11435 using `OLLAMA_MODELS`. `GET /ollama/status` feeds the sidebar, and terminal failures show whether the server is offline, the model is missing, or a response could not be parsed. The exact network scan command runs through the existing deterministic inventory workflow without Ollama.

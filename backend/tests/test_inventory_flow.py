@@ -1,4 +1,6 @@
 import json
+import io
+import os
 import shutil
 import sys
 import unittest
@@ -14,6 +16,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import agent
 import inventory_store
 import main
+import ollama_setup
+import start
 from inventory_logic import collect_alerts, propose_transfers
 
 
@@ -171,6 +175,37 @@ class InventoryFlowTests(unittest.TestCase):
             rejected = self.client.post("/chat", json={"message": "Transfer too much"}).json()
         self.assertFalse(rejected["is_parked"])
         self.assertIn("Transfer declined", rejected["text"])
+
+    def test_network_scan_works_without_ollama(self):
+        unavailable = SimpleNamespace(invoke=lambda _: (_ for _ in ()).throw(RuntimeError("Ollama should not be called")))
+        with patch.object(agent, "llm", unavailable):
+            result = self.client.post("/chat", json={"message": "Scan for shortages in all branches"})
+        self.assertEqual(result.status_code, 200)
+        self.assertTrue(result.json()["is_parked"])
+        self.assertIn("Paracetamol", result.json()["detail"]["deliverables"][0]["title"])
+
+    def test_missing_model_has_specific_status_and_terminal_error(self):
+        missing = {"state": "model_missing", "message": "Ollama is running, but llama3.2 is missing."}
+        with patch.object(main, "probe_ollama", return_value=missing):
+            self.assertEqual(self.client.get("/ollama/status").json(), missing)
+        unavailable = SimpleNamespace(invoke=lambda _: (_ for _ in ()).throw(RuntimeError("model not found (404)")))
+        with patch.object(agent, "llm", unavailable), patch.object(agent, "probe_ollama", return_value=missing):
+            result = self.client.post("/chat", json={"message": "Transfer 20 inhalers"}).json()
+        self.assertFalse(result["is_parked"])
+        self.assertEqual(result["text"], missing["message"])
+
+    def test_launcher_selects_server_with_model(self):
+        with patch.dict(os.environ, {"JDRN_OLLAMA_URL": ""}), patch.object(start, "probe_ollama", side_effect=[
+            {"state": "model_missing"}, {"state": "ready"},
+        ]):
+            self.assertEqual(start.choose_ollama_server(), (start.JDRN_URL, None))
+
+    def test_ollama_probe_distinguishes_missing_model_from_offline(self):
+        payload = json.dumps({"models": [{"name": "other:latest"}]}).encode("utf-8")
+        with patch.object(ollama_setup, "urlopen", return_value=io.BytesIO(payload)):
+            self.assertEqual(ollama_setup.probe_ollama("http://127.0.0.1:11434")["state"], "model_missing")
+        with patch.object(ollama_setup, "urlopen", side_effect=OSError("connection refused")):
+            self.assertEqual(ollama_setup.probe_ollama("http://127.0.0.1:11434")["state"], "offline")
 
 
 if __name__ == "__main__":

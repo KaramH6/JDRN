@@ -10,6 +10,7 @@ from pydantic import BaseModel # type: ignore
 
 from agent import execute_transfer, jdrn_graph
 from inventory_store import read_inventory, update_inventory
+from ollama_setup import OLLAMA_MODEL, OLLAMA_URL, probe_ollama
 
 app = FastAPI(title="JDRN Logistics API")
 
@@ -176,6 +177,10 @@ async def get_agent_status(session_id: str):
 @app.get("/inventory")
 async def get_inventory():
     return read_inventory()
+
+@app.get("/ollama/status")
+def get_ollama_status():
+    return probe_ollama(OLLAMA_URL, OLLAMA_MODEL)
 
 @app.post("/demo/consume")
 async def simulate_demand(req: DemandRequest):

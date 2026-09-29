@@ -181,6 +181,7 @@ async function loadDashboardData() {
         if (!res.ok) throw new Error('Inventory API error');
         const data = await res.json();
         if (!data.clinics) throw new Error('Inventory unavailable');
+        document.getElementById('backend-status').textContent = 'Inventory online';
         demoInventory = data.clinics;
         const branchSelect = document.getElementById('demo-branch');
         const selectedBranch = branchSelect.value;
@@ -245,6 +246,7 @@ async function loadDashboardData() {
         }).join('');
     } catch (err) {
         lastInventoryVersion = '';
+        document.getElementById('backend-status').textContent = 'Backend offline';
         grid.innerHTML = `<div class="col-span-full font-mono text-alert uppercase border border-alert p-6 text-center">Connection Error: Uvicorn Offline</div>`;
     }
 }
@@ -402,7 +404,7 @@ async function sendMessage() {
     } catch (err) {
         const loaderEl = document.getElementById(loaderId + '-text');
         if (loaderEl && loaderEl.parentElement) loaderEl.parentElement.remove();
-        appendMessage('agent', 'SYSTEM ERROR: Connection to logistics API failed.');
+        appendMessage('agent', `Terminal request failed: ${err.message}`);
     }
     
     isProcessing = false;
@@ -447,5 +449,22 @@ window.submitAction = async function(btn, actionType) {
     isProcessing = false;
 }
 
+async function refreshOllamaStatus() {
+    const label = document.getElementById('ollama-status');
+    try {
+        const response = await fetch(`${API_URL}/ollama/status`);
+        if (!response.ok) throw new Error('Backend unavailable');
+        const result = await response.json();
+        label.textContent = result.state === 'ready' ? 'Ollama ready' :
+            result.state === 'model_missing' ? 'Ollama model missing' : 'Ollama offline';
+        label.title = result.message;
+    } catch (error) {
+        label.textContent = 'Ollama status unavailable';
+        label.title = 'Start the JDRN backend to check Ollama.';
+    }
+}
+
 loadDashboardData();
+refreshOllamaStatus();
 setInterval(loadDashboardData, 5000);
+setInterval(refreshOllamaStatus, 15000);

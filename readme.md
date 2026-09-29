@@ -10,7 +10,7 @@ JDRN is a local hackathon MVP for spotting medicine shortages at clinics and pre
 4. Approve or reject the ticket. Approval checks current inventory again, deducts donor stock, and records the quantity as inbound at the recipient. The same ticket cannot dispatch twice.
 5. Return to the dashboard and click **INBOUND** to record receipt. The quantity moves into on-hand stock and the warning clears if stock rises above 30.
 
-The terminal also supports a network-wide scan and natural-language transfer requests through a local Ollama `llama3.2` model. Keep Ollama running for those commands.
+The terminal's **Scan for shortages in all branches** command runs without Ollama. Natural-language transfer requests use a local Ollama `llama3.2` model.
 
 ## Transfer rules
 
@@ -29,7 +29,7 @@ cd backend
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
-uvicorn main:app --reload
+python start.py
 ```
 
 In a second terminal:
@@ -39,7 +39,13 @@ cd frontend
 python -m http.server 3000
 ```
 
-Open <http://localhost:3000>. For the natural-language terminal, install Ollama and pull `llama3.2` with `ollama pull llama3.2`. The dashboard and focused alert review work without it. The page loads Tailwind and fonts from CDNs, so styling needs internet access unless those assets are hosted locally.
+Open <http://localhost:3000>. The backend launcher checks whether the default Ollama server has `llama3.2`. If it does not, it uses or starts a JDRN-only server on port 11435 with the model directory from this terminal's `OLLAMA_MODELS` environment variable. The sidebar shows whether the model is ready. The dashboard, focused review, and network-wide scan work without Ollama; natural-language transfers require it.
+Stop any backend already running on port 8000 before using the launcher. A previously started `uvicorn main:app --reload` process keeps its old Ollama connection settings until restarted.
+
+If the launcher reports a missing model, run `ollama list` and check `echo $env:OLLAMA_MODELS`. Typing `ollama` alone starts the CLI but does not confirm that the serving process sees `llama3.2`. Set `OLLAMA_MODELS` to the folder that contains the `manifests` and `blobs` directories, restart the Ollama app, or use `ollama pull llama3.2` to download the model into the server's active folder. On Windows, changing this variable requires restarting the Ollama tray app; see [Ollama's Windows instructions](https://github.com/ollama/ollama/blob/main/docs/windows.mdx).
+
+To use a different server or model, set `JDRN_OLLAMA_URL` or `JDRN_OLLAMA_MODEL` before running `python start.py`. If you launch with `uvicorn main:app --reload` directly, the launcher checks do not run. The page loads Tailwind and fonts from CDNs, so styling needs internet access unless those assets are hosted locally.
+Restart `python start.py` after editing backend code; the launcher does not use auto-reload.
 
 ## How the pieces fit
 
@@ -51,6 +57,8 @@ Open <http://localhost:3000>. For the natural-language terminal, install Ollama 
 | Clinic confirms delivery | `POST /receive` moves inbound units to on-hand stock. |
 
 `backend/agent.py` runs the LangGraph workflow. `backend/inventory_logic.py` holds alert and routing rules. `backend/inventory_store.py` serializes local JSON changes and replaces the file after a successful update. Ticket state lives in memory, so a backend restart clears pending approvals.
+
+`GET /ollama/status` reports `ready`, `model_missing`, or `offline`; the terminal shows the relevant setup message instead of treating every model error as a connection failure.
 
 ## Verify
 

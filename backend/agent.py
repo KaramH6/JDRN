@@ -8,6 +8,7 @@ from langchain_core.messages import HumanMessage # type: ignore
 
 from inventory_logic import DONOR_RESERVE, collect_alerts, propose_transfers, validate_transfer
 from inventory_store import read_inventory, update_inventory
+from ollama_setup import OLLAMA_MODEL, OLLAMA_URL, probe_ollama
 
 class AgentState(TypedDict):
     session_id: str
@@ -30,8 +31,13 @@ def emit_event(run_dir: str, ev: str, node: str, payload: dict):
 def load_db() -> Dict[str, Any]:
     return read_inventory()
 
-# Connect to your local Ollama instance. Forcing JSON format ensures clean extraction.
-llm = ChatOllama(model="llama3.2", temperature=0.0, format="json")
+# The launcher selects a server with the installed model and passes its URL here.
+llm = ChatOllama(model=OLLAMA_MODEL, base_url=OLLAMA_URL, temperature=0.0, format="json")
+
+SCAN_COMMANDS = {
+    "scan", "scan all branches", "scan for shortages",
+    "scan for shortages in all branches", "scan for low stock",
+}
 
 # --- GRAPH NODES ---
 
@@ -43,7 +49,12 @@ def analyze_request(state: AgentState) -> AgentState:
             "intent": "FOCUSED SCAN", "extracted": state["scan_scope"]
         })
         return {**state, "inventory": inventory, "intent": "scan", "shortages": [], "transfer_plans": []}
-    emit_event(state["run_dir"], "tool_call", "System", {"command": "Querying local Llama 3.2 model for intent..."})
+    if " ".join(msg.casefold().split()) in SCAN_COMMANDS:
+        emit_event(state["run_dir"], "classified", "Dashboard", {
+            "intent": "NETWORK SCAN", "extracted": {},
+        })
+        return {**state, "inventory": inventory, "intent": "scan", "shortages": [], "transfer_plans": []}
+    emit_event(state["run_dir"], "tool_call", "System", {"command": f"Querying local {OLLAMA_MODEL} model for intent..."})
     
     # Dynamically extract network context for the LLM
     available_clinics = list(inventory.get("clinics", {}).keys())
@@ -87,10 +98,15 @@ def analyze_request(state: AgentState) -> AgentState:
         })
         
     except Exception as e:
-        emit_event(state["run_dir"], "tool_call", "System", {"command": f"LLM Parsing failed: {e}", "success": False})
+        health = probe_ollama(OLLAMA_URL, OLLAMA_MODEL)
+        if health["state"] == "ready":
+            explanation = f"Ollama is reachable, but could not interpret this request: {e}"
+        else:
+            explanation = health["message"]
+        emit_event(state["run_dir"], "tool_call", "System", {"command": f"Ollama request failed: {e}", "success": False})
         return {
             **state, "inventory": inventory, "intent": "error", "transfer_plans": [], "shortages": [],
-            "final_response": "SYSTEM HALT: Cannot reach local Llama 3.2 engine. Verify the Ollama background process is running."
+            "final_response": explanation,
         }
 
     if intent == "manual":

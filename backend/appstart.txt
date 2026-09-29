@@ -1,5 +1,8 @@
-- in backend:
-uvicorn main:app --reload
+- in backend (recommended, checks/starts Ollama with the installed model):
+python start.py
+
+- if the launcher says the model is missing, check `ollama list` and `OLLAMA_MODELS`;
+  run `ollama pull llama3.2` for the server's model directory if needed.
 
 - in frontend:
 python -m http.server 3000
