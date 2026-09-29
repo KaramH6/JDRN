@@ -56,6 +56,7 @@ class InventoryFlowTests(unittest.TestCase):
         self.addCleanup(self.db_patch.stop)
         self.addCleanup(self.logs_patch.stop)
         main.session_store.clear()
+        main.conversation_store.clear()
         self.client = TestClient(main.app)
 
     def remove_test_dir(self):
@@ -172,7 +173,7 @@ class InventoryFlowTests(unittest.TestCase):
             "quantity": 201,
         })
         with patch.object(agent, "current_llm", return_value=SimpleNamespace(invoke=lambda _: SimpleNamespace(content=parsed))):
-            rejected = self.client.post("/chat", json={"message": "Transfer too much"}).json()
+            rejected = self.client.post("/chat", json={"message": "Transfer 201 Salbutamol inhalers from Amman Main to Amman East"}).json()
         self.assertFalse(rejected["is_parked"])
         self.assertIn("Transfer declined", rejected["text"])
 
@@ -182,6 +183,130 @@ class InventoryFlowTests(unittest.TestCase):
         self.assertEqual(result.status_code, 200)
         self.assertTrue(result.json()["is_parked"])
         self.assertIn("Paracetamol", result.json()["detail"]["deliverables"][0]["title"])
+
+    def test_scan_with_conversational_prefix_is_still_a_scan(self):
+        with patch.object(agent, "current_llm", side_effect=RuntimeError("Ollama should not be called")):
+            result = self.client.post("/chat", json={"message": "ok scan for all shortages"}).json()
+        self.assertTrue(result["is_parked"])
+        self.assertIn("Paracetamol", result["detail"]["deliverables"][0]["title"])
+
+    def test_ambiguous_transfer_asks_for_missing_details(self):
+        parsed = json.dumps({
+            "intent": "lookup", "scope": "inventory_query", "lookup_type": "max_branch_stock",
+            "drug": "Insulin_Glargine", "response": "",
+        })
+        with patch.object(agent, "current_llm", return_value=SimpleNamespace(invoke=lambda _: SimpleNamespace(content=parsed))):
+            result = self.client.post("/chat", json={
+                "message": "transfer from the branch that has the most to the least",
+            }).json()
+        self.assertFalse(result["is_parked"])
+        self.assertIn("medicine", result["text"])
+        self.assertIn("quantity", result["text"])
+        self.assertNotIn("Insulin", result["text"])
+
+    def test_relative_transfer_followup_uses_conversation_and_live_stock(self):
+        inventory_store.update_inventory(lambda data: data["clinics"]["Mafraq_North"]["inventory"].update({
+            "Salbutamol_Inhaler": {"quantity": 100, "in_transit": 0},
+        }))
+        first_parse = json.dumps({"intent": "manual", "scope": "jdrn", "drug": None, "quantity": 0})
+        second_parse = json.dumps({"intent": "manual", "scope": "jdrn", "drug": "Salbutamol_Inhaler", "quantity": 0})
+        replies = iter([first_parse, second_parse])
+        with patch.object(agent, "current_llm", return_value=SimpleNamespace(invoke=lambda _: SimpleNamespace(content=next(replies)))):
+            first = self.client.post("/chat", json={"message": "transfer from the branch that has the most to the least"}).json()
+            self.assertIn("medicine", first["text"])
+            second = self.client.post("/chat", json={
+                "conversation_id": first["conversation_id"], "message": "Salbutamol 20 units",
+            }).json()
+        self.assertEqual(second["conversation_id"], first["conversation_id"])
+        self.assertTrue(second["is_parked"], second)
+        self.assertIn("Mafraq North to Amman East", second["detail"]["deliverables"][0]["title"])
+
+    def test_total_across_all_types_ignores_hallucinated_drug(self):
+        parsed = json.dumps({
+            "intent": "lookup", "scope": "inventory_query", "lookup_type": "max_branch_stock",
+            "drug": "Metformin", "response": "",
+        })
+        with patch.object(agent, "current_llm", return_value=SimpleNamespace(invoke=lambda _: SimpleNamespace(content=parsed))):
+            result = self.client.post("/chat", json={
+                "message": "whats the branch that has the most total medicin across all types",
+            }).json()
+        self.assertFalse(result["is_parked"])
+        self.assertEqual(result["text"], "Most medicine on hand across all types: 32 units at Amman East.")
+        self.assertNotIn("Metformin", result["text"])
+        log = self.test_dir / "logs" / result["session_id"] / "events.jsonl"
+        events = [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()]
+        self.assertEqual(events[0]["payload"]["message"], "whats the branch that has the most total medicin across all types")
+        self.assertEqual(events[-1]["payload"]["text"], result["text"])
+
+    def test_inventory_question_returns_live_branch_max_without_shortage_scan(self):
+        def add_amoxicillin(inventory):
+            inventory["clinics"]["Amman_East"]["inventory"]["Amoxicillin"] = {
+                "quantity": 42, "in_transit": 5,
+            }
+            inventory["clinics"]["Mafraq_North"]["inventory"]["Amoxicillin"] = {
+                "quantity": 71, "in_transit": 0,
+            }
+        inventory_store.update_inventory(add_amoxicillin)
+        parsed = json.dumps({
+            "intent": "lookup", "scope": "inventory_query", "lookup_type": "max_branch_stock",
+            "drug": "Amoxicillin", "response": "",
+        })
+        with patch.object(agent, "current_llm", return_value=SimpleNamespace(invoke=lambda _: SimpleNamespace(content=parsed))):
+            result = self.client.post("/chat", json={
+                "message": "scan for what branch has the most Amoxicillin",
+            }).json()
+        self.assertFalse(result["is_parked"])
+        self.assertEqual(result["text"], "Most on-hand Amoxicillin: 71 units at Mafraq North (0 inbound).")
+        self.assertTrue(any(item["title"] == "Database Query" for item in result["tree_data"]))
+
+    def test_greeting_is_answered_by_model_without_scanning(self):
+        parsed = json.dumps({"intent": "chat", "scope": "greeting", "response": "Hello! I can help with clinic stock."})
+        with patch.object(agent, "current_llm", return_value=SimpleNamespace(invoke=lambda _: SimpleNamespace(content=parsed))) as llm:
+            result = self.client.post("/chat", json={"message": "hi"}).json()
+        llm.assert_called_once()
+        self.assertFalse(result["is_parked"])
+        self.assertEqual(result["text"], "Hello! I can help with clinic stock.")
+        self.assertIsNone(result["detail"])
+        self.assertEqual([item["title"] for item in result["tree_data"]], ["Executing System Process", "Intent Classification"])
+
+    def test_greeting_scope_cannot_create_transfer_even_if_intent_is_scan(self):
+        parsed = json.dumps({"intent": "scan", "scope": "greeting", "response": "Hello!"})
+        with patch.object(agent, "current_llm", return_value=SimpleNamespace(invoke=lambda _: SimpleNamespace(content=parsed))):
+            result = self.client.post("/chat", json={"message": "hi"}).json()
+        self.assertFalse(result["is_parked"])
+        self.assertEqual(result["text"], "Hello!")
+
+    def test_unrecognized_model_intent_cannot_fall_through_to_scan(self):
+        parsed = json.dumps({"donor_clinic": None, "target_clinic": None, "drug": None, "quantity": 0, "response": "What would you like help with?"})
+        with patch.object(agent, "current_llm", return_value=SimpleNamespace(invoke=lambda _: SimpleNamespace(content=parsed))):
+            result = self.client.post("/chat", json={"message": "what's up"}).json()
+        self.assertFalse(result["is_parked"])
+        self.assertEqual(result["text"], agent.OFF_TOPIC_RESPONSE)
+        self.assertIsNone(result["detail"])
+        self.assertEqual([item["title"] for item in result["tree_data"]], ["Executing System Process", "Intent Classification"])
+
+    def test_casual_and_unrelated_messages_do_not_scan(self):
+        for message in ("hello", "u good?", "what model are you"):
+            with self.subTest(message=message):
+                answer = "I am llama3.2." if message == "what model are you" else "Hello!"
+                scope = "model_identity" if message == "what model are you" else "greeting"
+                parsed = json.dumps({"intent": "chat", "scope": scope, "response": answer})
+                with patch.object(agent, "current_llm", return_value=SimpleNamespace(invoke=lambda _: SimpleNamespace(content=parsed))):
+                    result = self.client.post("/chat", json={"message": message}).json()
+                self.assertFalse(result["is_parked"])
+                self.assertEqual(result["text"], answer)
+                self.assertIsNone(result["detail"])
+
+    def test_off_topic_chat_is_refused_even_if_model_writes_an_answer(self):
+        parsed = json.dumps({
+            "intent": "chat", "scope": "off_topic",
+            "response": "Here is a cake recipe: mix flour and sugar.",
+        })
+        with patch.object(agent, "current_llm", return_value=SimpleNamespace(invoke=lambda _: SimpleNamespace(content=parsed))):
+            result = self.client.post("/chat", json={"message": "cake recipe"}).json()
+        self.assertFalse(result["is_parked"])
+        self.assertEqual(result["text"], agent.OFF_TOPIC_RESPONSE)
+        self.assertNotIn("cake", result["text"].lower())
 
     def test_missing_model_has_specific_status_and_terminal_error(self):
         missing = {"state": "model_missing", "message": "Ollama is running, but llama3.2 is missing."}

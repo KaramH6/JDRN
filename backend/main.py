@@ -8,7 +8,7 @@ from fastapi import FastAPI, HTTPException # type: ignore
 from fastapi.middleware.cors import CORSMiddleware # type: ignore
 from pydantic import BaseModel # type: ignore
 
-from agent import execute_transfer, jdrn_graph
+from agent import emit_event, execute_transfer, jdrn_graph
 from inventory_store import read_inventory, update_inventory
 from ollama_setup import OLLAMA_MODEL, get_ollama_url, probe_ollama
 
@@ -23,10 +23,11 @@ app.add_middleware(
 )
 
 session_store = {}
+conversation_store = {}
 session_lock = RLock()
 
 class ChatRequest(BaseModel):
-    session_id: Optional[str] = None
+    conversation_id: Optional[str] = None
     message: str
 
 class ActionRequest(BaseModel):
@@ -47,6 +48,7 @@ class ScanRequest(BaseModel):
 
 class AgentResponse(BaseModel):
     session_id: str
+    conversation_id: Optional[str] = None
     is_parked: bool
     detail: Optional[Dict[str, Any]] = None
     text: Optional[str] = None
@@ -88,7 +90,7 @@ def parse_tree_data(events_path: Path) -> list:
                     pass
     return tree_data
 
-def run_agent_turn(session_id: str, message: str = "", decision: Optional[str] = None, scope=None) -> AgentResponse:
+def run_agent_turn(session_id: str, message: str = "", decision: Optional[str] = None, scope=None, history=None, conversation_id=None) -> AgentResponse:
     if decision is not None:
         with session_lock:
             previous = session_store.get(session_id)
@@ -97,15 +99,18 @@ def run_agent_turn(session_id: str, message: str = "", decision: Optional[str] =
             if previous.get("human_decision") == "executed" or not previous.get("transfer_plans"):
                 raise HTTPException(status_code=409, detail="Transfer ticket is no longer pending. Scan again.")
             run_dir = Path(previous["run_dir"])
+            emit_event(str(run_dir), "request", "User", {"decision": decision})
             result = execute_transfer({**previous, "human_decision": decision})
             session_store[session_id] = result
     else:
         run_dir = LOGS_DIR / session_id
         run_dir.mkdir(parents=True, exist_ok=True)
+        emit_event(str(run_dir), "request", "User", {"message": message, "scan_scope": scope, "conversation_id": conversation_id})
         state = {
             "session_id": session_id,
             "run_dir": str(run_dir),
             "message": message,
+            "history": history or [],
             "human_decision": None,
             "transfer_plans": [],
             "shortages": [],
@@ -129,7 +134,7 @@ def run_agent_turn(session_id: str, message: str = "", decision: Optional[str] =
             }
             for p in plans
         ]
-        return AgentResponse(
+        response = AgentResponse(
             session_id=session_id,
             is_parked=True,
             detail={
@@ -139,13 +144,17 @@ def run_agent_turn(session_id: str, message: str = "", decision: Optional[str] =
             },
             tree_data=tree_data
         )
+        emit_event(str(run_dir), "response", "System", {"is_parked": True, "detail": response.detail})
+        return response
         
-    return AgentResponse(
+    response = AgentResponse(
         session_id=session_id,
         is_parked=False,
         text=result.get("final_response", "Process completed."),
         tree_data=tree_data
     )
+    emit_event(str(run_dir), "response", "System", {"is_parked": False, "text": response.text})
+    return response
 
 @app.get("/status")
 async def get_agent_status(session_id: str):
@@ -169,6 +178,7 @@ async def get_agent_status(session_id: str):
             elif ev == "tool_call": return {"status": "Processing data pipeline..."}
             elif ev == "plan_parked": return {"status": "Awaiting human authorization."}
             elif ev == "plan_decided": return {"status": "Executing authorized transfer."}
+            elif ev == "response": return {"status": "Completed."}
             
             return {"status": "Processing..."}
     except Exception:
@@ -228,7 +238,15 @@ async def receive_shipment(req: ReceiveRequest):
 
 @app.post("/chat", response_model=AgentResponse)
 async def start_or_continue_chat(request: ChatRequest):
-    return run_agent_turn(str(uuid.uuid4()), message=request.message)
+    conversation_id = request.conversation_id or str(uuid.uuid4())
+    with session_lock:
+        history = list(conversation_store.get(conversation_id, []))[-4:]
+    response = run_agent_turn(str(uuid.uuid4()), message=request.message, history=history, conversation_id=conversation_id)
+    reply = response.text or (response.detail or {}).get("business_process", "")
+    with session_lock:
+        conversation_store.setdefault(conversation_id, []).append({"user": request.message, "assistant": reply})
+        conversation_store[conversation_id] = conversation_store[conversation_id][-4:]
+    return response.model_copy(update={"conversation_id": conversation_id})
 
 @app.post("/scan", response_model=AgentResponse)
 async def scan_selected_alert(request: ScanRequest):

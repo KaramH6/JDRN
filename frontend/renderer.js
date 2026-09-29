@@ -300,6 +300,7 @@ function generateTreeHtml(treeData) {
 
 const chatContainer = document.getElementById('chat-container');
 const promptInput = document.getElementById('prompt-input');
+let conversationId = null;
 
 function appendMessage(role, content, treeData = null, trustedHtml = false) {
     const id = "msg-" + Date.now() + Math.floor(Math.random() * 100);
@@ -387,11 +388,12 @@ async function sendMessage() {
         const response = await fetch(`${API_URL}/chat`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ message: text })
+            body: JSON.stringify({ message: text, conversation_id: conversationId })
         });
 
         const data = await response.json();
         if (!response.ok) throw new Error(data.detail || 'Terminal request failed');
+        conversationId = data.conversation_id || conversationId;
         
         const loaderEl = document.getElementById(loaderId + '-text');
         if (loaderEl && loaderEl.parentElement) loaderEl.parentElement.remove();
