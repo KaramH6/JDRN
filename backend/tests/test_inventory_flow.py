@@ -282,38 +282,102 @@ class InventoryFlowTests(unittest.TestCase):
         self.assertTrue(any(item["title"] == "Database Query" for item in result["tree_data"]))
 
     def test_greeting_is_answered_by_model_without_scanning(self):
-        parsed = json.dumps({"intent": "chat", "scope": "greeting", "response": "Hello! I can help with clinic stock."})
-        with patch.object(agent, "current_llm", return_value=SimpleNamespace(invoke=lambda _: SimpleNamespace(content=parsed))) as llm:
+        parsed = json.dumps({"intent": "chat", "scope": "greeting"})
+        router = SimpleNamespace(invoke=lambda _: SimpleNamespace(content=parsed))
+        chat = SimpleNamespace(invoke=lambda _: SimpleNamespace(content="Hello! I can help with clinic stock."))
+        with patch.object(agent, "current_llm", return_value=router) as llm, patch.object(agent, "current_chat_llm", return_value=chat):
             result = self.client.post("/chat", json={"message": "hi"}).json()
         llm.assert_called_once()
         self.assertFalse(result["is_parked"])
         self.assertEqual(result["text"], "Hello! I can help with clinic stock.")
         self.assertIsNone(result["detail"])
-        self.assertEqual([item["title"] for item in result["tree_data"]], ["Executing System Process", "Intent Classification"])
+        self.assertEqual([item["title"] for item in result["tree_data"]], ["Executing System Process", "Intent Classification", "Executing System Process"])
 
     def test_greeting_scope_cannot_create_transfer_even_if_intent_is_scan(self):
-        parsed = json.dumps({"intent": "scan", "scope": "greeting", "response": "Hello!"})
-        with patch.object(agent, "current_llm", return_value=SimpleNamespace(invoke=lambda _: SimpleNamespace(content=parsed))):
+        parsed = json.dumps({"intent": "scan", "scope": "greeting"})
+        router = SimpleNamespace(invoke=lambda _: SimpleNamespace(content=parsed))
+        chat = SimpleNamespace(invoke=lambda _: SimpleNamespace(content="Hello!"))
+        with patch.object(agent, "current_llm", return_value=router), patch.object(agent, "current_chat_llm", return_value=chat):
             result = self.client.post("/chat", json={"message": "hi"}).json()
         self.assertFalse(result["is_parked"])
         self.assertEqual(result["text"], "Hello!")
 
+    def test_model_cannot_turn_an_insult_into_an_inventory_scan(self):
+        parsed = json.dumps({"intent": "scan", "scope": "jdrn"})
+        router = SimpleNamespace(invoke=lambda _: SimpleNamespace(content=parsed))
+        chat = SimpleNamespace(invoke=lambda _: SimpleNamespace(content="I can help with JDRN inventory or transfers."))
+        with patch.object(agent, "current_llm", return_value=router), patch.object(agent, "current_chat_llm", return_value=chat):
+            result = self.client.post("/chat", json={"message": "fuck you"}).json()
+        self.assertFalse(result["is_parked"])
+        self.assertEqual(result["text"], "I can help with JDRN inventory or transfers.")
+
     def test_unrecognized_model_intent_cannot_fall_through_to_scan(self):
-        parsed = json.dumps({"donor_clinic": None, "target_clinic": None, "drug": None, "quantity": 0, "response": "What would you like help with?"})
-        with patch.object(agent, "current_llm", return_value=SimpleNamespace(invoke=lambda _: SimpleNamespace(content=parsed))):
+        parsed = json.dumps({"donor_clinic": None, "target_clinic": None, "drug": None, "quantity": 0})
+        router = SimpleNamespace(invoke=lambda _: SimpleNamespace(content=parsed))
+        chat = SimpleNamespace(invoke=lambda _: SimpleNamespace(content="I can help with JDRN inventory or transfers."))
+        with patch.object(agent, "current_llm", return_value=router), patch.object(agent, "current_chat_llm", return_value=chat):
             result = self.client.post("/chat", json={"message": "what's up"}).json()
         self.assertFalse(result["is_parked"])
-        self.assertEqual(result["text"], agent.OFF_TOPIC_RESPONSE)
+        self.assertEqual(result["text"], "I can help with JDRN inventory or transfers.")
         self.assertIsNone(result["detail"])
-        self.assertEqual([item["title"] for item in result["tree_data"]], ["Executing System Process", "Intent Classification"])
+        self.assertEqual([item["title"] for item in result["tree_data"]], ["Executing System Process", "Intent Classification", "Executing System Process"])
+
+    def test_model_identity_retries_a_repeated_greeting(self):
+        router_replies = iter([
+            json.dumps({"intent": "chat", "scope": "greeting"}),
+            json.dumps({"intent": "chat", "scope": "greeting"}),
+        ])
+        chat_replies = iter([
+            "Hello! How can I assist you today?",
+            "I'm the JDRN (Joint Data Repository) assistant running llama3.2.",
+            "I'm the Jordan Drug Redistribution Network assistant running llama3.2.",
+        ])
+        router = SimpleNamespace(invoke=lambda _: SimpleNamespace(content=next(router_replies)))
+        chat = SimpleNamespace(invoke=lambda _: SimpleNamespace(content=next(chat_replies)))
+        with patch.object(agent, "current_llm", return_value=router), patch.object(agent, "current_chat_llm", return_value=chat):
+            first = self.client.post("/chat", json={"message": "hi"}).json()
+            second = self.client.post("/chat", json={
+                "conversation_id": first["conversation_id"], "message": "which ollama model are you",
+            }).json()
+        self.assertEqual(first["text"], "Hello! How can I assist you today?")
+        self.assertIn("llama3.2", second["text"])
+        self.assertIn("Jordan Drug Redistribution Network", second["text"])
+        self.assertNotIn("Joint Data Repository", second["text"])
+
+    def test_model_typo_cannot_be_answered_as_a_login_request(self):
+        parsed = json.dumps({"intent": "chat", "scope": "model_identity"})
+        router = SimpleNamespace(invoke=lambda _: SimpleNamespace(content=parsed))
+        replies = iter([
+            "I don't recognize modek as a username. Please use the login function. I am llama3.2.",
+            "I am the JDRN assistant running llama3.2.",
+        ])
+        chat = SimpleNamespace(invoke=lambda _: SimpleNamespace(content=next(replies)))
+        with patch.object(agent, "current_llm", return_value=router), patch.object(agent, "current_chat_llm", return_value=chat):
+            result = self.client.post("/chat", json={"message": "modek"}).json()
+        self.assertIn("llama3.2", result["text"])
+        self.assertNotIn("username", result["text"].lower())
+
+    def test_hardcoded_question_retries_until_it_explains_model_and_python_roles(self):
+        parsed = json.dumps({"intent": "chat", "scope": "model_identity"})
+        router = SimpleNamespace(invoke=lambda _: SimpleNamespace(content=parsed))
+        replies = iter([
+            "This answer is generated by llama3.2.",
+            "This reply is generated by llama3.2; Python code handles inventory calculations, routing, and approval checks.",
+        ])
+        chat = SimpleNamespace(invoke=lambda _: SimpleNamespace(content=next(replies)))
+        with patch.object(agent, "current_llm", return_value=router), patch.object(agent, "current_chat_llm", return_value=chat):
+            result = self.client.post("/chat", json={"message": "are you hardcoded or is this model answering"}).json()
+        self.assertIn("Python code", result["text"])
 
     def test_casual_and_unrelated_messages_do_not_scan(self):
         for message in ("hello", "u good?", "what model are you"):
             with self.subTest(message=message):
                 answer = "I am llama3.2." if message == "what model are you" else "Hello!"
                 scope = "model_identity" if message == "what model are you" else "greeting"
-                parsed = json.dumps({"intent": "chat", "scope": scope, "response": answer})
-                with patch.object(agent, "current_llm", return_value=SimpleNamespace(invoke=lambda _: SimpleNamespace(content=parsed))):
+                parsed = json.dumps({"intent": "chat", "scope": scope})
+                router = SimpleNamespace(invoke=lambda _: SimpleNamespace(content=parsed))
+                chat = SimpleNamespace(invoke=lambda _: SimpleNamespace(content=answer))
+                with patch.object(agent, "current_llm", return_value=router), patch.object(agent, "current_chat_llm", return_value=chat):
                     result = self.client.post("/chat", json={"message": message}).json()
                 self.assertFalse(result["is_parked"])
                 self.assertEqual(result["text"], answer)
@@ -322,13 +386,13 @@ class InventoryFlowTests(unittest.TestCase):
     def test_off_topic_chat_is_refused_even_if_model_writes_an_answer(self):
         parsed = json.dumps({
             "intent": "chat", "scope": "off_topic",
-            "response": "Here is a cake recipe: mix flour and sugar.",
         })
-        with patch.object(agent, "current_llm", return_value=SimpleNamespace(invoke=lambda _: SimpleNamespace(content=parsed))):
+        router = SimpleNamespace(invoke=lambda _: SimpleNamespace(content=parsed))
+        chat = SimpleNamespace(invoke=lambda _: SimpleNamespace(content="I can help with JDRN, but not cake recipes."))
+        with patch.object(agent, "current_llm", return_value=router), patch.object(agent, "current_chat_llm", return_value=chat):
             result = self.client.post("/chat", json={"message": "cake recipe"}).json()
         self.assertFalse(result["is_parked"])
-        self.assertEqual(result["text"], agent.OFF_TOPIC_RESPONSE)
-        self.assertNotIn("cake", result["text"].lower())
+        self.assertEqual(result["text"], "I can help with JDRN, but not cake recipes.")
 
     def test_missing_model_has_specific_status_and_terminal_error(self):
         missing = {"state": "model_missing", "message": "Ollama is running, but llama3.2 is missing."}
@@ -355,8 +419,9 @@ class InventoryFlowTests(unittest.TestCase):
 
     def test_runtime_ollama_url_reaches_status_and_client_after_import(self):
         selected = "http://127.0.0.1:11435"
-        previous_client, previous_url = agent.llm, agent.llm_url
+        previous_client, previous_chat_client, previous_url = agent.llm, agent.chat_llm, agent.llm_url
         self.addCleanup(setattr, agent, "llm", previous_client)
+        self.addCleanup(setattr, agent, "chat_llm", previous_chat_client)
         self.addCleanup(setattr, agent, "llm_url", previous_url)
         with patch.dict(os.environ, {"JDRN_OLLAMA_URL": selected}):
             with patch.object(main, "probe_ollama", return_value={"state": "ready", "message": "ready"}) as probe:
