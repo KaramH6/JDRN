@@ -202,6 +202,16 @@ class InventoryFlowTests(unittest.TestCase):
         self.assertTrue(result["is_parked"])
         self.assertIn("Paracetamol", result["detail"]["deliverables"][0]["title"])
 
+    def test_scan_all_inventory_ignores_spurious_lookup_fields(self):
+        parsed = json.dumps({
+            "intent": "scan", "scope": "inventory_query", "lookup_type": "max_branch_stock",
+            "drug": None, "quantity": 0, "response": "",
+        })
+        with patch.object(agent, "current_llm", return_value=SimpleNamespace(invoke=lambda _: SimpleNamespace(content=parsed))):
+            result = self.client.post("/chat", json={"message": "scan all the inventory"}).json()
+        self.assertTrue(result["is_parked"])
+        self.assertIn("Paracetamol", result["detail"]["deliverables"][0]["title"])
+
     def test_ambiguous_transfer_asks_for_missing_details(self):
         parsed = json.dumps({
             "intent": "lookup", "scope": "inventory_query", "lookup_type": "max_branch_stock",

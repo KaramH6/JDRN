@@ -63,3 +63,5 @@ Recent demo traces showed four response failures: a polite shortage request was 
 The terminal sends a conversation ID with each message, letting the backend keep the last four exchanges in memory for follow-up requests. Event logs now include the original request and returned response under that ID, so future conversations can be reconstructed. This history disappears when the backend restarts.
 
 The router also preserves whole-inventory shortage requests when the model attaches inventory lookup fields to a `scan` classification. The exact phrase "all the entire inventory for shortages" now enters the shortage workflow instead of asking for a medicine name.
+
+A later trace exposed the same conflict for "scan all the inventory": the model said `scan` but also supplied a lookup type, and the backend chose lookup. The router now respects a `scan` classification unless the user's question asks for a comparative or numeric inventory answer. A network scan request can also correct a misplaced lookup classification. Both the scan phrase and a medicine ranking question are covered by tests.

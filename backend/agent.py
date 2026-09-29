@@ -215,7 +215,9 @@ def analyze_request(state: AgentState) -> AgentState:
         intent = parsed.get("intent")
         if intent not in {"scan", "lookup", "manual", "chat"}:
             intent = "chat"
-        if parsed.get("scope") == "inventory_query" and parsed.get("lookup_type") in LOOKUP_TYPES:
+        lookup_question = re.search(r"\b(most|least|highest|lowest|which|where|total|how many|how much)\b", normalized_request)
+        if (parsed.get("scope") == "inventory_query" and parsed.get("lookup_type") in LOOKUP_TYPES
+                and (intent != "scan" or lookup_question)):
             intent = "lookup"
         if re.search(r"\b(transfer|move|send|ship)\b", normalized_request) and parsed.get("scope") != "off_topic":
             intent = "manual"
@@ -230,8 +232,17 @@ def analyze_request(state: AgentState) -> AgentState:
         if intent == "lookup" and re.search(r"\b(total|overall|combined|all types|all medicines|all drugs)\b", normalized_request) and not named_drug:
             parsed["lookup_type"] = "max_branch_total"
             parsed["drug"] = None
-        if (re.search(r"\bshortages?\b", normalized_request)
-                and re.search(r"\b(all|entire|inventory|branches|network)\b", normalized_request)):
+        network_shortage_request = (
+            re.search(r"\bshortages?\b", normalized_request)
+            and re.search(r"\b(all|entire|inventory|branches|network)\b", normalized_request)
+        )
+        network_scan_request = (
+            re.search(r"\b(scan|check)\b", normalized_request)
+            and re.search(r"\b(inventory|stock|branches|network)\b", normalized_request)
+            and not named_drug
+            and not re.search(r"\b(most|least|highest|lowest|which|where|total)\b", normalized_request)
+        )
+        if network_shortage_request or network_scan_request:
             intent = "scan"
         
         emit_event(state["run_dir"], "classified", "Llama 3.2", {
