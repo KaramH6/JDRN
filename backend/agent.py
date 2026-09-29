@@ -1,10 +1,13 @@
 import json
-import re
+from copy import deepcopy
 from pathlib import Path
-from typing import TypedDict, Dict, Any, Optional, List, cast
+from typing import TypedDict, Dict, Any, Optional, List
 from langgraph.graph import StateGraph, END # type: ignore
 from langchain_ollama import ChatOllama # type: ignore
 from langchain_core.messages import HumanMessage # type: ignore
+
+from inventory_logic import DONOR_RESERVE, collect_alerts, propose_transfers, validate_transfer
+from inventory_store import read_inventory, update_inventory
 
 class AgentState(TypedDict):
     session_id: str
@@ -16,6 +19,8 @@ class AgentState(TypedDict):
     transfer_plans: List[Dict[str, Any]]
     human_decision: Optional[str]
     final_response: Optional[str]
+    scan_scope: Optional[tuple]
+    unresolved: List[str]
 
 def emit_event(run_dir: str, ev: str, node: str, payload: dict):
     events_path = Path(run_dir) / "events.jsonl"
@@ -23,9 +28,7 @@ def emit_event(run_dir: str, ev: str, node: str, payload: dict):
         f.write(json.dumps({"ev": ev, "node": node, "payload": payload}) + "\n")
 
 def load_db() -> Dict[str, Any]:
-    db_path = Path(__file__).parent.parent / "data" / "inventory.json"
-    with open(db_path, "r", encoding="utf-8") as f:
-        return json.load(f)
+    return read_inventory()
 
 # Connect to your local Ollama instance. Forcing JSON format ensures clean extraction.
 llm = ChatOllama(model="llama3.2", temperature=0.0, format="json")
@@ -35,6 +38,11 @@ llm = ChatOllama(model="llama3.2", temperature=0.0, format="json")
 def analyze_request(state: AgentState) -> AgentState:
     msg = state.get("message", "")
     inventory = load_db()
+    if state.get("scan_scope"):
+        emit_event(state["run_dir"], "classified", "Dashboard", {
+            "intent": "FOCUSED SCAN", "extracted": state["scan_scope"]
+        })
+        return {**state, "inventory": inventory, "intent": "scan", "shortages": [], "transfer_plans": []}
     emit_event(state["run_dir"], "tool_call", "System", {"command": "Querying local Llama 3.2 model for intent..."})
     
     # Dynamically extract network context for the LLM
@@ -92,27 +100,38 @@ def analyze_request(state: AgentState) -> AgentState:
         qty = parsed.get("quantity", 0)
         
         # LLM Guardrails: Ensure Llama didn't hallucinate IDs or try to self-transfer
-        if not donor or not target or not drug or donor == target:
+        clinics = inventory.get("clinics", {})
+        if (not donor or not target or not drug or donor == target
+                or donor not in clinics or target not in clinics
+                or drug not in clinics[donor].get("inventory", {})
+                or drug not in clinics[target].get("inventory", {})):
             emit_event(state["run_dir"], "proposed", "Logistics", {"reason": "LLM routing error: Invalid or missing parameters.", "changes": []})
             return {
                 **state, "inventory": inventory, "intent": "error", "transfer_plans": [], "shortages": [],
                 "final_response": "❌ Transfer aborted: Ensure you specify a valid source, destination, and drug name."
             }
 
-        actual_stock = inventory.get("clinics", {}).get(donor, {}).get("inventory", {}).get(drug, {}).get("quantity", 0)
+        actual_stock = clinics[donor]["inventory"][drug].get("quantity", 0)
         
-        if qty <= 0 or qty > actual_stock:
+        if (not isinstance(qty, int) or isinstance(qty, bool) or qty <= 0
+                or actual_stock - qty < DONOR_RESERVE):
             emit_event(state["run_dir"], "proposed", "Logistics", {"reason": "Override REJECTED. Insufficient stock.", "changes": []})
             return {
                 **state, "inventory": inventory, "intent": "error", "transfer_plans": [], "shortages": [],
-                "final_response": f"❌ Logistics Error: Cannot transfer {qty} units. {donor.replace('_', ' ')} currently has {actual_stock} units of {drug.replace('_', ' ')}."
+                "final_response": f"❌ Transfer declined: {donor.replace('_', ' ')} has {actual_stock} units and must keep {DONOR_RESERVE}."
             }
 
         plan = {
             "from": donor,
             "to": target,
             "drug": drug,
-            "quantity_to_move": qty
+            "quantity_to_move": qty,
+            "donor_before": actual_stock,
+            "donor_after": actual_stock - qty,
+            "recipient_before": clinics[target]["inventory"][drug].get("quantity", 0),
+            "recipient_in_transit": clinics[target]["inventory"][drug].get("in_transit", 0),
+            "reason": f"manual dispatcher request; donor keeps at least {DONOR_RESERVE} units",
+            "kind": "manual",
         }
         
         emit_event(state["run_dir"], "proposed", "Logistics", {
@@ -124,86 +143,26 @@ def analyze_request(state: AgentState) -> AgentState:
     return {**state, "inventory": inventory, "intent": "scan", "shortages": [], "transfer_plans": []}
 
 def check_inventory(state: AgentState) -> AgentState:
-    emit_event(state["run_dir"], "tool_call", "InventoryMonitor", {"command": "data find --target clinics"})
+    emit_event(state["run_dir"], "tool_call", "InventoryMonitor", {"command": "Check branch stock against early-warning threshold"})
     inventory = state.get("inventory", {})
-    
-    shortages: List[Dict[str, Any]] = []
-    for clinic_id, data in inventory.get("clinics", {}).items():
-        for drug_name, details in data.get("inventory", {}).items():
-            if details.get("quantity", 0) <= 0:
-                shortages.append({"clinic": clinic_id, "drug": drug_name})
-                
-    return {**state, "shortages": shortages}
+    return {**state, "shortages": collect_alerts(inventory, state.get("scan_scope"))}
 
 def route_issue(state: AgentState) -> AgentState:
     shortages = state.get("shortages", [])
     if shortages:
-        emit_event(state["run_dir"], "routed", "Router", {"assignments": [{"domain": f"Logistics Agent ({len(shortages)} shortages detected)"}]})
+        emit_event(state["run_dir"], "routed", "Router", {"assignments": [{"domain": f"Logistics Agent ({len(shortages)} alerts detected)"}]})
         return state
-    return {**state, "final_response": "All clinic inventories are stable. No shortages detected."}
+    return {**state, "final_response": "No at-risk or out-of-stock branch medicine found for this scan."}
 
 def find_surplus(state: AgentState) -> AgentState:
-    shortages = state.get("shortages", [])
-    inventory = state.get("inventory", {})
-    plans: List[Dict[str, Any]] = []
-    
-    temp_stock: Dict[str, Dict[str, int]] = {}
-    for cid, cdata in inventory.get("clinics", {}).items():
-        temp_stock[cid] = {}
-        for dname, ddetails in cdata.get("inventory", {}).items():
-            temp_stock[cid][dname] = ddetails.get("quantity", 0)
-
-    for item in shortages:
-        clinic = item["clinic"]
-        drug = item["drug"]
-        target_region = inventory["clinics"][clinic].get("location")
-        
-        emit_event(state["run_dir"], "grounded", "Logistics", {
-            "query": f"Surplus search for {drug} needed at {clinic}",
-            "results": "Calculating optimal donor node..."
+    plans, unresolved = propose_transfers(state["inventory"], state.get("shortages", []))
+    for plan in plans:
+        emit_event(state["run_dir"], "proposed", "Logistics", {
+            "reason": plan["reason"],
+            "changes": [{"target": plan["drug"], "from": plan["from"], "to": plan["to"]}],
         })
-        
-        best_donor = None
-        best_rank = None
-        for donor_id, dstock in temp_stock.items():
-            if donor_id == clinic:
-                continue
-            cur_qty = dstock.get(drug, 0)
-            if cur_qty <= 0:
-                continue
-            donor = inventory["clinics"][donor_id]
-            rank = (
-                donor.get("location") == target_region,
-                donor.get("type") == "hq",
-                cur_qty,
-            )
-            if best_rank is None or rank > best_rank:
-                best_rank = rank
-                best_donor = donor_id
-                
-        if best_donor:
-            max_qty = temp_stock[best_donor][drug]
-            safe_surplus = max_qty - 50
-            transfer_amount = min(50, safe_surplus) if safe_surplus > 0 else min(20, max_qty)
-            if transfer_amount <= 0:
-                transfer_amount = min(10, max_qty)
-                
-            temp_stock[best_donor][drug] -= transfer_amount
-            
-            plan = {
-                "from": best_donor,
-                "to": clinic,
-                "drug": drug,
-                "quantity_to_move": transfer_amount
-            }
-            plans.append(plan)
-            
-            emit_event(state["run_dir"], "proposed", "Logistics", {
-                "reason": f"Preventing stockout at {clinic}", 
-                "changes": [{"target": drug, "from": best_donor, "to": clinic}]
-            })
-    
-    return {**state, "transfer_plans": plans}
+    response = None if plans else "No safe transfer is available. " + " ".join(unresolved)
+    return {**state, "transfer_plans": plans, "unresolved": unresolved, "final_response": response}
 
 def human_approval_gate(state: AgentState) -> AgentState:
     decision = state.get("human_decision")
@@ -220,36 +179,40 @@ def human_approval_gate(state: AgentState) -> AgentState:
 def execute_transfer(state: AgentState) -> AgentState:
     decision = state.get("human_decision")
     plans = state.get("transfer_plans", [])
-    
-    if decision not in ["approve", "reject"]: return state
-    if decision == "executed": return state
+    if decision not in ["approve", "reject"] or not plans:
+        return state
+    emit_event(state["run_dir"], "plan_decided", "HITL Gate", {"outcome": decision, "by": "Medical Dispatcher"})
+    if decision == "reject":
+        return {**state, "human_decision": "executed", "final_response": "Transfer rejected by dispatcher. Inventory was not changed."}
 
-    if decision == "approve":
-        emit_event(state["run_dir"], "tool_call", "System", {"command": "Dispatching logistics vehicles...", "success": True})
-        
-        db_path = Path(__file__).parent.parent / "data" / "inventory.json"
-        inventory = state.get("inventory", {})
-        
-        summary_lines = []
+    class TransferConflict(Exception):
+        pass
+
+    def dispatch(inventory):
+        # Validate the entire batch before changing any item.
+        preview = deepcopy(inventory)
         for plan in plans:
-            donor_stock = inventory.get("clinics", {}).get(plan["from"], {}).get("inventory", {}).get(plan["drug"], {})
-            target_stock = inventory.get("clinics", {}).get(plan["to"], {}).get("inventory", {}).get(plan["drug"], {})
-            
-            donor_stock["quantity"] = donor_stock.get("quantity", 0) - plan["quantity_to_move"]
-            target_stock["in_transit"] = target_stock.get("in_transit", 0) + plan["quantity_to_move"]
-            
-            summary_lines.append(f"• {plan['quantity_to_move']} units of {plan['drug'].replace('_', ' ')}: {plan['from'].replace('_', ' ')} ➔ {plan['to'].replace('_', ' ')}")
-            
-        with open(db_path, "w", encoding="utf-8") as f:
-            json.dump(inventory, f, indent=2)
-            
-        return {
-            **state,
-            "human_decision": "executed",
-            "final_response": "✅ Dispatch Authorized & Confirmed:\n" + "\n".join(summary_lines)
-        }
-    else:
-        return {**state, "human_decision": "executed", "final_response": "❌ Transfer rejected by dispatcher."}
+            problem = validate_transfer(preview, plan)
+            if problem:
+                raise TransferConflict(problem)
+            donor = preview["clinics"][plan["from"]]["inventory"][plan["drug"]]
+            recipient = preview["clinics"][plan["to"]]["inventory"][plan["drug"]]
+            donor["quantity"] -= plan["quantity_to_move"]
+            recipient["in_transit"] = recipient.get("in_transit", 0) + plan["quantity_to_move"]
+        inventory["clinics"] = preview["clinics"]
+
+    try:
+        update_inventory(dispatch)
+    except TransferConflict as error:
+        emit_event(state["run_dir"], "tool_call", "System", {"command": str(error), "success": False})
+        return {**state, "human_decision": "executed", "final_response": f"Transfer not dispatched: {error}"}
+
+    emit_event(state["run_dir"], "tool_call", "System", {"command": "Reserved donor stock and marked shipments inbound", "success": True})
+    summary = "\n".join(
+        f"• {plan['quantity_to_move']} {plan['drug'].replace('_', ' ')}: {plan['from'].replace('_', ' ')} → {plan['to'].replace('_', ' ')}"
+        for plan in plans
+    )
+    return {**state, "human_decision": "executed", "final_response": "Transfer approved; shipment is inbound.\n" + summary}
 
 workflow = StateGraph(AgentState)
 workflow.add_node("analyze_request", analyze_request)

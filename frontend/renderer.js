@@ -1,5 +1,4 @@
 const API_URL = "http://127.0.0.1:8000";
-let currentSessionId = 'jdrn-' + Date.now();
 let isProcessing = false; 
 let lastInventoryVersion = '';
 let demoInventory = {};
@@ -44,8 +43,9 @@ async function consumeDemoStock() {
         const result = await response.json();
         await loadDashboardData();
         if (!demoRunning) return;
-        if (result.quantity === 0) {
-            stopDemandSimulation(`${drug.replace(/_/g, ' ')} at ${clinicId.replace(/_/g, ' ')} reached zero. Review the alert and ask the agent for a plan.`);
+        if (result.quantity <= 30) {
+            const status = result.quantity === 0 ? 'out of stock' : 'at risk';
+            stopDemandSimulation(`${drug.replace(/_/g, ' ')} at ${clinicId.replace(/_/g, ' ')} is ${status} with ${result.quantity} units. Review its alert for a transfer plan.`);
         } else {
             document.getElementById('demo-status').textContent = `${clinicId.replace(/_/g, ' ')}: ${result.quantity} ${drug.replace(/_/g, ' ')} units remaining.`;
             demoTimer = setTimeout(consumeDemoStock, 2000);
@@ -78,10 +78,11 @@ async function restockDemoBranch() {
             body: JSON.stringify({clinic_id: clinicId, drug})
         });
         if (!response.ok) throw new Error('Restock request failed');
-        document.getElementById('demo-status').textContent = `${clinicId.replace(/_/g, ' ')} restocked with 45 units of ${drug.replace(/_/g, ' ')} for another run.`;
+        const result = await response.json();
+        document.getElementById('demo-status').textContent = `${clinicId.replace(/_/g, ' ')} reset to ${result.quantity} units of ${drug.replace(/_/g, ' ')} for another run.`;
         loadDashboardData();
     } catch (error) {
-        document.getElementById('demo-status').textContent = 'Restock failed. Check the Python server.';
+        document.getElementById('demo-status').textContent = 'Reset failed. Receive any inbound shipment first, then check the Python server.';
     }
 }
 
@@ -101,13 +102,47 @@ function renderShortageAlerts(shortages) {
         alertBox.innerHTML = '';
         return;
     }
-    const rows = shortages.map(item => `<li>${escapeHtml(item.clinic.replace(/_/g, ' '))}: ${escapeHtml(item.drug.replace(/_/g, ' '))} (0 available${item.inTransit ? `, ${item.inTransit} inbound` : ''})</li>`).join('');
-    alertBox.innerHTML = `<div class="brutalist-border border-alert bg-red-50 p-5">
+    const stockouts = shortages.filter(item => item.status === 'out_of_stock').length;
+    const atRisk = shortages.length - stockouts;
+    const rows = shortages.map(item => `<li class="flex flex-wrap items-center justify-between gap-2 border-t border-black/10 py-2">
+        <span><strong class="${item.status === 'out_of_stock' ? 'text-alert' : 'text-transit'}">${item.status === 'out_of_stock' ? 'OUT OF STOCK' : 'AT RISK'}</strong> · ${escapeHtml(item.clinic.replace(/_/g, ' '))}: ${escapeHtml(item.drug.replace(/_/g, ' '))} (${item.quantity} on hand${item.inTransit ? `, ${item.inTransit} inbound` : ''})</span>
+        <button type="button" class="review-alert bg-black text-white px-3 py-1 font-mono text-xs font-bold uppercase" data-clinic="${escapeHtml(item.clinic)}" data-drug="${escapeHtml(item.drug)}">Review transfer</button>
+    </li>`).join('');
+    alertBox.innerHTML = `<div class="brutalist-border bg-white p-5">
         <div class="flex flex-wrap items-center justify-between gap-4">
-            <div><h3 class="font-bold uppercase text-alert">${shortages.length} stockout${shortages.length === 1 ? '' : 's'} detected</h3>
-                <p class="text-xs font-mono mt-1">Review the affected sites, then ask the agent for a transfer plan.</p></div>
-            <button type="button" onclick="openShortageScan()" class="bg-black text-white px-4 py-2 font-mono text-xs font-bold uppercase">Review in terminal</button>
-        </div><ul class="mt-3 list-disc pl-5 text-sm font-mono space-y-1">${rows}</ul></div>`;
+            <div><h3 class="font-bold uppercase">${atRisk} at risk · ${stockouts} out of stock</h3>
+                <p class="text-xs font-mono mt-1">Review a medicine before dispatch. Inbound stock is counted when planning.</p></div>
+            <button type="button" onclick="openShortageScan()" class="brutalist-border px-4 py-2 font-mono text-xs font-bold uppercase">Scan all branches</button>
+        </div><ul class="mt-3 text-sm font-mono">${rows}</ul></div>`;
+}
+
+document.getElementById('shortage-alerts').addEventListener('click', event => {
+    const button = event.target.closest('.review-alert');
+    if (button) reviewAlert(button.dataset.clinic, button.dataset.drug);
+});
+
+async function reviewAlert(clinicId, drug) {
+    if (isProcessing) return;
+    isProcessing = true;
+    switchView('agent');
+    appendMessage('user', `Review ${drug.replace(/_/g, ' ')} at ${clinicId.replace(/_/g, ' ')}`);
+    const loaderId = appendMessage('agent', '<div class="loader"></div> Checking live inventory...', null, true);
+    try {
+        const response = await fetch(`${API_URL}/scan`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({clinic_id: clinicId, drug})
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || 'Focused scan failed');
+        document.getElementById(loaderId + '-text')?.parentElement?.remove();
+        if (data.is_parked) appendActionCard(data.detail, data.session_id, data.tree_data);
+        else appendMessage('agent', data.text || 'No transfer needed.', data.tree_data);
+    } catch (error) {
+        document.getElementById(loaderId + '-text')?.parentElement?.remove();
+        appendMessage('agent', `Scan failed: ${error.message}`);
+    }
+    isProcessing = false;
 }
 
 function switchView(viewName) {
@@ -162,7 +197,11 @@ async function loadDashboardData() {
             const region = clinic.location || 'Other';
             (groups[region] ||= []).push([key, clinic]);
             for (const [drug, details] of Object.entries(clinic.inventory || {})) {
-                if (details.quantity <= 0) shortages.push({clinic: key, drug, inTransit: details.in_transit || 0});
+                if (clinic.type === 'branch' && details.quantity <= 30) shortages.push({
+                    clinic: key, drug, quantity: details.quantity,
+                    inTransit: details.in_transit || 0,
+                    status: details.quantity <= 0 ? 'out_of_stock' : 'at_risk'
+                });
             }
         }
         renderShortageAlerts(shortages);
@@ -171,7 +210,8 @@ async function loadDashboardData() {
             const cards = sites.map(([key, clinic]) => {
                 let inventoryHtml = '';
                 for (const [drug, details] of Object.entries(clinic.inventory || {})) {
-                    const isCritical = details.quantity <= 0;
+                    const isCritical = details.quantity <= 0 && clinic.type === 'branch';
+                    const isAtRisk = details.quantity > 0 && details.quantity <= 30 && clinic.type === 'branch';
                     const inTransitVal = details.in_transit || 0;
                     
                     const inTransitBadge = inTransitVal > 0 
@@ -182,9 +222,9 @@ async function loadDashboardData() {
                         
                     inventoryHtml += `
                         <div class="flex justify-between items-center py-3 border-t border-black/10">
-                            <span class="text-sm font-medium ${isCritical ? 'text-alert font-bold' : ''}">${escapeHtml(drug.replace(/_/g, ' '))}</span>
+                            <span class="text-sm font-medium ${isCritical ? 'text-alert font-bold' : isAtRisk ? 'text-transit font-bold' : ''}">${escapeHtml(drug.replace(/_/g, ' '))}</span>
                             <div class="flex items-center">
-                                <span class="font-mono text-sm ${isCritical ? 'bg-alert text-white px-2 py-0.5' : ''}">${details.quantity}</span>
+                                <span class="font-mono text-sm ${isCritical ? 'bg-alert text-white px-2 py-0.5' : isAtRisk ? 'bg-transit text-white px-2 py-0.5' : ''}">${details.quantity}</span>
                                 ${inTransitBadge}
                             </div>
                         </div>
@@ -221,7 +261,7 @@ window.receiveShipment = async function(clinicId, drug) {
 }
 
 function escapeHtml(unsafe) {
-    return (unsafe || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    return String(unsafe || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
 function generateTreeHtml(treeData) {
@@ -259,7 +299,7 @@ function generateTreeHtml(treeData) {
 const chatContainer = document.getElementById('chat-container');
 const promptInput = document.getElementById('prompt-input');
 
-function appendMessage(role, content, treeData = null) {
+function appendMessage(role, content, treeData = null, trustedHtml = false) {
     const id = "msg-" + Date.now() + Math.floor(Math.random() * 100);
     let html = '';
     
@@ -267,7 +307,7 @@ function appendMessage(role, content, treeData = null) {
         html = `
             <div class="border-t border-black/20 py-6 max-w-4xl">
                 <div class="text-[10px] font-mono font-bold uppercase text-black/50 mb-2 tracking-widest">User Request</div>
-                <div class="text-lg font-medium tracking-tight">> ${content}</div>
+                <div class="text-lg font-medium tracking-tight">> ${escapeHtml(content)}</div>
             </div>
         `;
     } else {
@@ -275,7 +315,7 @@ function appendMessage(role, content, treeData = null) {
         html = `
             <div class="border-t border-black py-6 max-w-4xl bg-accent/20 px-6 my-4 brutalist-border">
                 <div class="text-[10px] font-mono font-bold uppercase text-black/50 mb-2 tracking-widest">System Output</div>
-                <div id="${id}-text" class="whitespace-pre-wrap text-sm leading-relaxed">${content}</div>
+                <div id="${id}-text" class="whitespace-pre-wrap text-sm leading-relaxed">${trustedHtml ? content : escapeHtml(content)}</div>
                 ${treeHtml}
             </div>
         `;
@@ -286,7 +326,7 @@ function appendMessage(role, content, treeData = null) {
     return id;
 }
 
-function appendActionCard(detail, treeData = null) {
+function appendActionCard(detail, sessionId, treeData = null) {
     const treeHtml = generateTreeHtml(treeData);
     
     let deliverablesHtml = '';
@@ -294,6 +334,8 @@ function appendActionCard(detail, treeData = null) {
         deliverablesHtml = detail.deliverables.map((d, i) => `
             <div class="font-mono text-sm border-b border-black/10 pb-2 mb-2 last:border-0 last:mb-0 last:pb-0">
                 <span class="font-bold">ORD_${i + 1}:</span> ${escapeHtml(d.title)}
+                <div class="text-xs mt-1">${escapeHtml(d.detail)}</div>
+                <div class="text-xs text-black/60 mt-1">Why: ${escapeHtml(d.reason)}</div>
             </div>
         `).join('');
     } else {
@@ -301,7 +343,7 @@ function appendActionCard(detail, treeData = null) {
     }
 
     const html = `
-        <div class="max-w-4xl my-6 action-card brutalist-border bg-base p-0">
+        <div class="max-w-4xl my-6 action-card brutalist-border bg-base p-0" data-session-id="${escapeHtml(sessionId)}">
             <div class="bg-black text-white px-6 py-3">
                 <h4 class="font-bold uppercase tracking-tight text-lg">Human Authorization Required</h4>
                 <p class="text-xs font-mono opacity-70">${escapeHtml(detail.business_process)}</p>
@@ -310,6 +352,7 @@ function appendActionCard(detail, treeData = null) {
                 <div class="bg-accent/50 p-4 brutalist-border mb-6">
                     ${deliverablesHtml}
                 </div>
+                ${detail.unresolved?.length ? `<p class="text-xs font-mono text-alert mb-4">${escapeHtml(detail.unresolved.join(' '))}</p>` : ''}
                 <div class="flex gap-4 interaction-area border-t border-black pt-6">
                     <button type="button" onclick="submitAction(this, 'approve')" class="px-6 py-3 bg-black text-white font-mono text-sm font-bold uppercase hover:bg-black/80 transition-colors">
                         Approve Transfer
@@ -336,22 +379,23 @@ async function sendMessage() {
     promptInput.value = "";
     isProcessing = true;
     
-    const loaderId = appendMessage('agent', '<div class="flex items-center gap-3"><div class="loader"></div><span class="font-mono text-sm uppercase">Processing Request...</span></div>');
+    const loaderId = appendMessage('agent', '<div class="flex items-center gap-3"><div class="loader"></div><span class="font-mono text-sm uppercase">Processing Request...</span></div>', null, true);
     
     try {
         const response = await fetch(`${API_URL}/chat`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ session_id: currentSessionId, message: text })
+            body: JSON.stringify({ message: text })
         });
 
         const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || 'Terminal request failed');
         
         const loaderEl = document.getElementById(loaderId + '-text');
         if (loaderEl && loaderEl.parentElement) loaderEl.parentElement.remove();
         
         if (data.is_parked) {
-            appendActionCard(data.detail, data.tree_data);
+            appendActionCard(data.detail, data.session_id, data.tree_data);
         } else {
             appendMessage('agent', data.text, data.tree_data);
         }
@@ -370,18 +414,20 @@ window.submitAction = async function(btn, actionType) {
 
     const card = btn.closest('.action-card');
     const interactionArea = card.querySelector('.interaction-area');
+    const previousButtons = interactionArea.innerHTML;
     interactionArea.innerHTML = `<span class="text-sm font-mono font-bold uppercase">Action Logged: [${actionType}]</span>`;
 
-    const loaderId = appendMessage('agent', '<div class="flex items-center gap-3"><div class="loader"></div><span class="font-mono text-sm uppercase">Executing Dispatch...</span></div>');
+    const loaderId = appendMessage('agent', '<div class="flex items-center gap-3"><div class="loader"></div><span class="font-mono text-sm uppercase">Executing Dispatch...</span></div>', null, true);
 
     try {
         const response = await fetch(`${API_URL}/action`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ session_id: currentSessionId, decision: { decision: actionType } })
+            body: JSON.stringify({ session_id: card.dataset.sessionId, decision: { decision: actionType } })
         });
 
         const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || 'Decision failed');
         
         const loaderEl = document.getElementById(loaderId + '-text');
         if (loaderEl && loaderEl.parentElement) loaderEl.parentElement.remove();
@@ -394,7 +440,8 @@ window.submitAction = async function(btn, actionType) {
     } catch (err) {
         const loaderEl = document.getElementById(loaderId + '-text');
         if (loaderEl && loaderEl.parentElement) loaderEl.parentElement.remove();
-        appendMessage('agent', 'SYSTEM ERROR: Execution sequence failed.');
+        interactionArea.innerHTML = previousButtons;
+        appendMessage('agent', `Decision failed: ${err.message}`);
     }
     
     isProcessing = false;

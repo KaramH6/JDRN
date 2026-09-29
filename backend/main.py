@@ -1,14 +1,15 @@
-import os
 import uuid
 import json
 from pathlib import Path
+from threading import RLock
 from typing import Optional, Dict, Any
 
 from fastapi import FastAPI, HTTPException # type: ignore
 from fastapi.middleware.cors import CORSMiddleware # type: ignore
 from pydantic import BaseModel # type: ignore
 
-from agent import jdrn_graph
+from agent import execute_transfer, jdrn_graph
+from inventory_store import read_inventory, update_inventory
 
 app = FastAPI(title="JDRN Logistics API")
 
@@ -21,6 +22,7 @@ app.add_middleware(
 )
 
 session_store = {}
+session_lock = RLock()
 
 class ChatRequest(BaseModel):
     session_id: Optional[str] = None
@@ -38,6 +40,10 @@ class DemandRequest(BaseModel):
     clinic_id: str
     drug: str
 
+class ScanRequest(BaseModel):
+    clinic_id: str
+    drug: str
+
 class AgentResponse(BaseModel):
     session_id: str
     is_parked: bool
@@ -45,7 +51,8 @@ class AgentResponse(BaseModel):
     text: Optional[str] = None
     tree_data: Optional[list] = None
 
-os.makedirs("logs", exist_ok=True)
+LOGS_DIR = Path(__file__).parent / "logs"
+LOGS_DIR.mkdir(exist_ok=True)
 
 def parse_tree_data(events_path: Path) -> list:
     tree_data = []
@@ -80,47 +87,54 @@ def parse_tree_data(events_path: Path) -> list:
                     pass
     return tree_data
 
-def run_agent_turn(session_id: str, message: str = "", decision: Optional[str] = None) -> AgentResponse:
-    run_dir = Path(f"logs/{session_id}")
-    os.makedirs(run_dir, exist_ok=True)
-    
-    if session_id not in session_store:
+def run_agent_turn(session_id: str, message: str = "", decision: Optional[str] = None, scope=None) -> AgentResponse:
+    if decision is not None:
+        with session_lock:
+            previous = session_store.get(session_id)
+            if previous is None:
+                raise HTTPException(status_code=404, detail="Transfer ticket not found. Scan again.")
+            if previous.get("human_decision") == "executed" or not previous.get("transfer_plans"):
+                raise HTTPException(status_code=409, detail="Transfer ticket is no longer pending. Scan again.")
+            run_dir = Path(previous["run_dir"])
+            result = execute_transfer({**previous, "human_decision": decision})
+            session_store[session_id] = result
+    else:
+        run_dir = LOGS_DIR / session_id
+        run_dir.mkdir(parents=True, exist_ok=True)
         state = {
             "session_id": session_id,
             "run_dir": str(run_dir),
             "message": message,
             "human_decision": None,
             "transfer_plans": [],
-            "shortages": []
+            "shortages": [],
+            "unresolved": [],
+            "scan_scope": scope,
         }
-    else:
-        state = session_store[session_id]
-        if decision:
-            state["human_decision"] = decision
-        else:
-            state["message"] = message
-            state["human_decision"] = None
-            state["transfer_plans"] = []
-            state["shortages"] = []
-            state["final_response"] = None
-            
-    result = jdrn_graph.invoke(state)
-    session_store[session_id] = result
+        result = jdrn_graph.invoke(state)
+        with session_lock:
+            session_store[session_id] = result
     
     tree_data = parse_tree_data(run_dir / "events.jsonl")
     
     plans = result.get("transfer_plans", [])
     if plans and result.get("human_decision") not in ["approve", "reject", "executed"]:
         deliverables = [
-            {"type": "Transfer Order", "title": f"Move {p['quantity_to_move']} units of {p['drug'].replace('_', ' ')} from {p['from'].replace('_', ' ')} to {p['to'].replace('_', ' ')}"}
+            {
+                "type": "Transfer Order",
+                "title": f"Move {p['quantity_to_move']} units of {p['drug'].replace('_', ' ')} from {p['from'].replace('_', ' ')} to {p['to'].replace('_', ' ')}",
+                "detail": f"Recipient: {p['recipient_before']} on hand, {p['recipient_in_transit']} inbound. Donor: {p['donor_before']} → {p['donor_after']} after dispatch.",
+                "reason": p["reason"],
+            }
             for p in plans
         ]
         return AgentResponse(
             session_id=session_id,
             is_parked=True,
             detail={
-                "business_process": f"Mitigation Required ({len(plans)} Relocations)",
-                "deliverables": deliverables
+                "business_process": f"Mitigation required ({len(plans)} proposed transfer{'s' if len(plans) != 1 else ''})",
+                "deliverables": deliverables,
+                "unresolved": result.get("unresolved", []),
             },
             tree_data=tree_data
         )
@@ -134,7 +148,7 @@ def run_agent_turn(session_id: str, message: str = "", decision: Optional[str] =
 
 @app.get("/status")
 async def get_agent_status(session_id: str):
-    events_path = Path(f"logs/{session_id}/events.jsonl")
+    events_path = LOGS_DIR / session_id / "events.jsonl"
     if not events_path.exists():
         return {"status": "Waking up JDRN AI..."}
         
@@ -149,7 +163,7 @@ async def get_agent_status(session_id: str):
             
             if ev == "classified": return {"status": "Analyzing inventory systems..."}
             elif ev == "routed": return {"status": "Assigning Logistics Agent..."}
-            elif ev == "grounded": return {"status": "Searching Hakeem databases for surplus..."}
+            elif ev == "grounded": return {"status": "Checking simulated network inventory for surplus..."}
             elif ev == "proposed": return {"status": "Drafting redistribution route..."}
             elif ev == "tool_call": return {"status": "Processing data pipeline..."}
             elif ev == "plan_parked": return {"status": "Awaiting human authorization."}
@@ -161,81 +175,66 @@ async def get_agent_status(session_id: str):
 
 @app.get("/inventory")
 async def get_inventory():
-    db_path = Path(__file__).parent.parent / "data" / "inventory.json"
-    if db_path.exists():
-        with open(db_path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return {"error": "Database not found"}
+    return read_inventory()
 
 @app.post("/demo/consume")
 async def simulate_demand(req: DemandRequest):
     """Consume a fixed amount of branch stock for a repeatable local demo."""
-    db_path = Path(__file__).parent.parent / "data" / "inventory.json"
-    with open(db_path, "r", encoding="utf-8") as f:
-        inventory = json.load(f)
-
-    site = inventory.get("clinics", {}).get(req.clinic_id)
-    if not site or site.get("type") != "branch":
-        raise HTTPException(status_code=400, detail="Choose a valid branch")
-    stock = site.get("inventory", {}).get(req.drug)
-    if stock is None:
-        raise HTTPException(status_code=400, detail="Medicine not found at this branch")
-
-    stock["quantity"] = max(0, stock.get("quantity", 0) - 15)
-    with open(db_path, "w", encoding="utf-8") as f:
-        json.dump(inventory, f, indent=2)
-    return {"clinic_id": req.clinic_id, "drug": req.drug, "quantity": stock["quantity"]}
+    def consume(inventory):
+        stock = branch_stock(inventory, req.clinic_id, req.drug)
+        stock["quantity"] = max(0, stock.get("quantity", 0) - 15)
+        return {"clinic_id": req.clinic_id, "drug": req.drug, "quantity": stock["quantity"]}
+    return update_inventory(consume)
 
 @app.post("/demo/restock")
 async def restock_demo_branch(req: DemandRequest):
     """Give one branch medicine a fresh starting quantity for another demo run."""
-    db_path = Path(__file__).parent.parent / "data" / "inventory.json"
-    with open(db_path, "r", encoding="utf-8") as f:
-        inventory = json.load(f)
+    def restock(inventory):
+        stock = branch_stock(inventory, req.clinic_id, req.drug)
+        if stock.get("in_transit", 0) > 0:
+            raise HTTPException(status_code=409, detail="Receive the inbound shipment before resetting this demo item")
+        quantity = 32 if (req.clinic_id, req.drug) == ("Amman_East", "Salbutamol_Inhaler") else 45
+        stock["quantity"] = quantity
+        return {"clinic_id": req.clinic_id, "drug": req.drug, "quantity": quantity}
+    return update_inventory(restock)
 
-    site = inventory.get("clinics", {}).get(req.clinic_id)
+def branch_stock(inventory, clinic_id: str, drug: str):
+    site = inventory.get("clinics", {}).get(clinic_id)
     if not site or site.get("type") != "branch":
         raise HTTPException(status_code=400, detail="Choose a valid branch")
-    stock = site.get("inventory", {}).get(req.drug)
+    stock = site.get("inventory", {}).get(drug)
     if stock is None:
         raise HTTPException(status_code=400, detail="Medicine not found at this branch")
-
-    stock["quantity"] = 45
-    stock["in_transit"] = 0
-    with open(db_path, "w", encoding="utf-8") as f:
-        json.dump(inventory, f, indent=2)
-    return {"clinic_id": req.clinic_id, "drug": req.drug, "quantity": 45}
+    return stock
 
 @app.post("/receive")
 async def receive_shipment(req: ReceiveRequest):
-    db_path = Path(__file__).parent.parent / "data" / "inventory.json"
-    if not db_path.exists(): return {"error": "Database not found"}
-        
-    with open(db_path, "r", encoding="utf-8") as f:
-        inventory = json.load(f)
-        
-    try:
-        stock = inventory["clinics"][req.clinic_id]["inventory"][req.drug]
+    def receive(inventory):
+        stock = inventory.get("clinics", {}).get(req.clinic_id, {}).get("inventory", {}).get(req.drug)
+        if stock is None:
+            raise HTTPException(status_code=404, detail="Clinic or medicine not found")
         in_transit = stock.get("in_transit", 0)
-        
-        if in_transit > 0:
-            stock["quantity"] = stock.get("quantity", 0) + in_transit
-            stock["in_transit"] = 0
-            with open(db_path, "w", encoding="utf-8") as f:
-                json.dump(inventory, f, indent=2)
-                
-        return {"status": "success"}
-    except KeyError:
-        return {"error": "Clinic or drug not found in database"}
+        if in_transit <= 0:
+            raise HTTPException(status_code=409, detail="No inbound shipment to receive")
+        stock["quantity"] = stock.get("quantity", 0) + in_transit
+        stock["in_transit"] = 0
+        return {"status": "success", "quantity": stock["quantity"]}
+    return update_inventory(receive)
 
 @app.post("/chat", response_model=AgentResponse)
 async def start_or_continue_chat(request: ChatRequest):
-    session_id = request.session_id or str(uuid.uuid4())
-    return run_agent_turn(session_id, message=request.message)
+    return run_agent_turn(str(uuid.uuid4()), message=request.message)
+
+@app.post("/scan", response_model=AgentResponse)
+async def scan_selected_alert(request: ScanRequest):
+    branch_stock(read_inventory(), request.clinic_id, request.drug)
+    return run_agent_turn(str(uuid.uuid4()), scope=(request.clinic_id, request.drug))
 
 @app.post("/action", response_model=AgentResponse)
 async def handle_human_action(request: ActionRequest):
-    decision = request.decision.get("decision", "reject") 
+    decision = request.decision.get("decision") if isinstance(request.decision, dict) else None
+    if decision not in ("approve", "reject"):
+        raise HTTPException(status_code=400, detail="Decision must be approve or reject")
     return run_agent_turn(request.session_id, decision=decision)
 
 if __name__ == "__main__":

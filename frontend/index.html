@@ -86,7 +86,7 @@
                 <div class="flex flex-wrap items-end gap-4">
                     <div class="mr-auto">
                         <h3 class="font-bold uppercase">Demo mode: simulate demand</h3>
-                        <p class="text-xs font-mono text-black/60 mt-1">Consumes 15 units every 2 seconds until this branch reaches zero.</p>
+                        <p class="text-xs font-mono text-black/60 mt-1">Consumes 15 units per simulated step and pauses at the early-warning threshold.</p>
                     </div>
                     <label class="text-xs font-mono uppercase">Branch
                         <select id="demo-branch" onchange="updateDemoMedicines()" class="block brutalist-border bg-white p-2 mt-1 min-w-44"></select>
@@ -97,7 +97,7 @@
                     <button type="button" id="demo-toggle" onclick="toggleDemandSimulation()" class="bg-black text-white px-4 py-2 font-mono text-xs font-bold uppercase">Start simulation</button>
                     <button type="button" id="demo-restock" onclick="restockDemoBranch()" class="brutalist-border bg-white px-4 py-2 font-mono text-xs font-bold uppercase">Restock selected</button>
                 </div>
-                <p id="demo-status" class="text-xs font-mono mt-3" role="status" aria-live="polite">Select a branch and medicine to create a stockout during the demo.</p>
+                <p id="demo-status" class="text-xs font-mono mt-3" role="status" aria-live="polite">Amman East salbutamol starts at 32 units. One step triggers an at-risk alert.</p>
             </div>
             <div id="shortage-alerts" class="hidden mb-8" role="status" aria-live="polite"></div>
             <div id="clinics-grid" class="space-y-10">
@@ -112,7 +112,7 @@
                 <!-- Greeting -->
                 <div class="border-l-4 border-black pl-4 mb-10">
                     <h3 class="font-bold text-xl uppercase tracking-tight">JDRN Early-Warning Routing Protocol</h3>
-                    <p class="text-sm font-mono mt-2">Connected to Hakeem local DB. Awaiting scan or transfer directives.</p>
+                    <p class="text-sm font-mono mt-2">Connected to the simulated clinic inventory. Awaiting scan or transfer directives.</p>
                 </div>
             </div>
 

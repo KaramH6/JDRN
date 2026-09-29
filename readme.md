@@ -1,90 +1,68 @@
 # Jordan Drug Redistribution Network (JDRN)
-Jordan 2076 Hackathon
 
-## MVP stockout demo
+JDRN is a local hackathon MVP for spotting medicine shortages at clinics and preparing safe stock transfers for a dispatcher to approve. It uses simulated inventory for 16 sites across Amman, Zarqa, Mafraq, and Al-Karak. It does not connect to a live health record system.
 
-`data/inventory.json` contains four governorates (Amman, Zarqa, Mafraq, and Al-Karak). Each has one main storage HQ and three branches. The dashboard reads the file through the Python API every five seconds while the page is open. A stockout means `quantity` is `0` or below; `in_transit` is shown separately until a shipment is received.
+## What the demo shows
 
-For the judging demo, open the dashboard and use **Demo mode: simulate demand**. Choose a branch and medicine, then click **Start simulation**. The backend consumes 15 units every two seconds and stops at zero. The dashboard will show a stockout notice and a **Review in terminal** button. In the terminal, submit the prefilled scan request, review the proposed transfers, and approve or reject them. Approval subtracts stock from the donor and adds it to the recipient's `in_transit`; click the recipient's **INBOUND** button to receive it. The stockout notice clears after receipt.
+1. The dashboard reads `data/inventory.json` every five seconds. A branch with **1–30 units** is **At risk**; a branch with **0 units** is **Out of stock**. Inbound stock remains separate until received.
+2. Select **Amman East** and **Salbutamol Inhaler** in Demo mode. Use **Restock selected** if you need a fresh run; this pair resets to 32 units. Start the simulation. One 15-unit step leaves 17 units and pauses with an early warning.
+3. Choose **Review transfer** on that alert. The focused scan checks live inventory and proposes a donor, transfer quantity, donor balance after dispatch, and a short reason. Focused scans do not require Ollama.
+4. Approve or reject the ticket. Approval checks current inventory again, deducts donor stock, and records the quantity as inbound at the recipient. The same ticket cannot dispatch twice.
+5. Return to the dashboard and click **INBOUND** to record receipt. The quantity moves into on-hand stock and the warning clears if stock rises above 30.
 
-Keep the backend and Ollama running during the demo. Use **Restock selected** to give the chosen branch medicine 45 units for another run. You can still edit `data/inventory.json` manually; changes are picked up on the next poll. Simulation changes are saved to that file. No external notification service is needed for this MVP.
+The terminal also supports a network-wide scan and natural-language transfer requests through a local Ollama `llama3.2` model. Keep Ollama running for those commands.
 
-## Conceptual Overview (Had men el proposal)
+## Transfer rules
 
-**The Problem:** While Jordan allocates a significant portion of its GDP to healthcare, its medical supply chain suffers from a "last-mile" logistics gap[cite: 1]. Fragmented systems mean a central hospital in Amman or Zarqa might sit on surplus inventory while a rural clinic in Mafraq faces critical, life-threatening stockouts of sensitive items like insulin or specialized infant formula.
+- Only branch medicines generate low-stock alerts. The alert threshold is 30 units and the proposed target is 45 on-hand plus inbound units.
+- An automatic proposal chooses one eligible donor: a source that can meet the 45-unit target first, then the same governorate, then an HQ, then the site with the most spare stock. If no single donor can meet the target, it proposes the safest available partial transfer. This ranks simulated sites; it does not calculate travel distance.
+- Every donor must retain at least 50 on-hand units after dispatch. If no donor can do that, the system explains why it cannot propose a transfer. Existing inbound stock is counted to avoid repeat proposals.
+- A dispatcher must approve a proposal. Approval rechecks latest inventory; a stale or unsafe ticket is declined. Rejection leaves inventory unchanged.
+- Manual terminal transfers use the same 50-unit donor reserve.
 
-**The Solution:** JDRN is an AI-driven, early-warning supply chain overlay[cite: 1]. It acts as an intelligent bridge between existing clinic databases (simulating Jordan's *Hakeem* system)[cite: 1]. Instead of waiting for a rural clinic to run out of medicine, the system proactively scans for localized shortages, finds the nearest surplus, and automatically drafts a redistribution transfer ticket for a human dispatcher to approve.
+## Run locally
 
----
+Use Python 3.10+ and two terminals. From the project root:
 
-## Technical Design & Architecture
-
-We built this as a MVP (Minimum Viable Product) to have a flawless offline capable demo without the ghalabeh of cloud deployments.
-
-* **The Brain:** We use **Ollama** running the lightweight **Llama 3.2** model locally. This ensures absolute data privacy and zero API costs. The LLM parses natural language commands (e.g., *"Transfer 50 insulin to Mafraq"*) and extracts the precise intent, locations, and quantities.
-* **The Logic Engine (LangGraph & Python):** The backend is built with **FastAPI** and **LangGraph**. LangGraph manages the agent's workflow state: it checks inventory, queries the AI, drafts the logistical route, parks the process for human approval, and finally executes the transfer.
-* **The Database:** To keep things agile, we bypassed SQL and used a mock `inventory.json` file. It acts as our simulated national database, updating in real-time as transfers are approved and shipments are received. (Bne7ki ino had limitaiton lal MVP w for real deployments we use mongodb or sm)
-* **The Interface (Vanilla JS & HTML):** A high-performance, single-page application styled with **Tailwind CSS**. We chose a strict, functional "brutalist" design pattern tailored for enterprise logistics, featuring a live global dashboard and an AI dispatch terminal.
-
----
-
-
-## Prerequisites (had elkom to try the project 3ala your laptops)
-
-Before running the project, ensure you have the following installed:
-* Python 3.10+
-* Ollama (Download from [ollama.com](https://ollama.com/))
-
-**Installing the AI Model:**  
-Open your terminal/command prompt and run:
-```bash
-ollama run llama3.2
-```
-
-Wait for the download to finish and verify it says "success". You can type /bye to exit the prompt. The Ollama engine will keep running in your system background.
-How to Run the System
-
-You will need to open two separate terminal windows to run the backend and frontend simultaneously.
-
-Step 1: Start the Backend (API & Agent)
-
-Open Terminal 1, navigate to the root of the JDRN project, and set up the Python environment:
-```bash
-# 1. Navigate into the backend folder
+```powershell
 cd backend
-
-# 2. Create an isolated virtual environment
 python -m venv .venv
-
-# 3. Activate the environment
-# On Windows:
-.\.venv\Scripts\activate
-# On Mac/Linux:
-source .venv/bin/activate
-
-# 4. Install required libraries
+.\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
-
-# 5. Start the FastAPI server
 uvicorn main:app --reload
 ```
 
-Leave this terminal open. It will show a continuous feed of the AI's internal processing logs.
+In a second terminal:
 
-Step 2: Start the Frontend (User Interface)
-
-Open Terminal 2, navigate to the root of the JDRN project, and start the local web server:
-
-```bash
-# 1. Navigate into the frontend folder
+```powershell
 cd frontend
-
-# 2. Start Python's built-in HTTP server
 python -m http.server 3000
-
-Step 3: Access the Dashboard
-
-Open your web browser (Chrome, Edge, Safari) and navigate to:
-
-http://localhost:3000
 ```
+
+Open <http://localhost:3000>. For the natural-language terminal, install Ollama and pull `llama3.2` with `ollama pull llama3.2`. The dashboard and focused alert review work without it. The page loads Tailwind and fonts from CDNs, so styling needs internet access unless those assets are hosted locally.
+
+## How the pieces fit
+
+| Operational step | MVP implementation |
+| --- | --- |
+| Clinic stock becomes low | `GET /inventory` supplies the dashboard; focused and network scans apply the same threshold. |
+| Dispatcher reviews a transfer | `POST /scan` creates a focused ticket; `POST /chat` handles terminal commands. Python rules check donor stock and choose a source. |
+| Dispatcher authorizes movement | `POST /action` revalidates the ticket and records donor deduction plus recipient inbound stock in `data/inventory.json`. |
+| Clinic confirms delivery | `POST /receive` moves inbound units to on-hand stock. |
+
+`backend/agent.py` runs the LangGraph workflow. `backend/inventory_logic.py` holds alert and routing rules. `backend/inventory_store.py` serializes local JSON changes and replaces the file after a successful update. Ticket state lives in memory, so a backend restart clears pending approvals.
+
+## Verify
+
+From the project root:
+
+```powershell
+python -B -m unittest discover -s backend/tests -v
+node --check frontend/renderer.js
+```
+
+The tests use isolated inventory files; they do not change `data/inventory.json`.
+
+## MVP boundary
+
+The current warning is a stock threshold, not a validated burn-rate forecast. The system does not estimate travel time, inspect medicine expiry when routing, authenticate dispatchers, or integrate with Hakeem. Those need real operational data and a production design. See `changes.md` for the feature rationale and its business-to-technical mapping.
