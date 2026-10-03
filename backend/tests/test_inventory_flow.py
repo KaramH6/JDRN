@@ -6,6 +6,7 @@ import sys
 import unittest
 import uuid
 from pathlib import Path
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -74,6 +75,84 @@ class InventoryFlowTests(unittest.TestCase):
         return self.client.post("/action", json={
             "session_id": ticket, "decision": {"decision": decision},
         })
+
+    def test_stock_timestamps_follow_changes_and_not_dashboard_reads(self):
+        original = self.db_path.read_text(encoding="utf-8")
+        snapshot = self.client.get("/inventory").json()["clinics"]
+        self.assertIsNone(snapshot["Amman_East"]["inventory"]["Salbutamol_Inhaler"]["last_updated"])
+        self.assertEqual(self.db_path.read_text(encoding="utf-8"), original)
+        changed_at = datetime(2026, 10, 3, 10, 0, tzinfo=timezone.utc)
+        with patch.object(inventory_store, "utc_now", return_value=changed_at):
+            self.client.post("/demo/consume", json={"clinic_id": "Amman_East", "drug": "Salbutamol_Inhaler"})
+        current = self.client.get("/inventory").json()["clinics"]
+        self.assertEqual(current["Amman_East"]["inventory"]["Salbutamol_Inhaler"]["last_updated"], changed_at.isoformat())
+        self.assertIsNone(current["Amman_Main"]["inventory"]["Salbutamol_Inhaler"]["last_updated"])
+        saved = self.db_path.read_text(encoding="utf-8")
+        self.client.get("/inventory")
+        ticket = self.scan().json()["session_id"]
+        self.decide(ticket, "reject")
+        self.assertEqual(self.db_path.read_text(encoding="utf-8"), saved)
+        later = changed_at + timedelta(minutes=10)
+        with patch.object(inventory_store, "utc_now", return_value=later):
+            self.client.post("/demo/restock", json={"clinic_id": "Amman_East", "drug": "Salbutamol_Inhaler"})
+        self.assertEqual(inventory_store.read_inventory()["clinics"]["Amman_East"]["inventory"]["Salbutamol_Inhaler"]["last_updated"], later.isoformat())
+
+    def test_dispatch_eta_persists_until_receipt_and_updates_both_stock_records(self):
+        self.client.post("/demo/consume", json={"clinic_id": "Amman_East", "drug": "Salbutamol_Inhaler"})
+        ticket = self.scan().json()["session_id"]
+        dispatched_at = datetime(2026, 10, 3, 10, 0, tzinfo=timezone.utc)
+        with patch.object(agent, "utc_now", return_value=dispatched_at), patch.object(inventory_store, "utc_now", return_value=dispatched_at):
+            self.assertEqual(self.decide(ticket).status_code, 200)
+        current = self.client.get("/inventory").json()["clinics"]
+        target = current["Amman_East"]["inventory"]["Salbutamol_Inhaler"]
+        donor = current["Amman_Main"]["inventory"]["Salbutamol_Inhaler"]
+        self.assertEqual(target["inbound_shipments"], [{
+            "from": "Amman_Main", "quantity": 28, "estimate_kind": "demo",
+            "dispatched_at": dispatched_at.isoformat(),
+            "eta": (dispatched_at + timedelta(hours=1)).isoformat(),
+        }])
+        self.assertEqual(target["last_updated"], dispatched_at.isoformat())
+        self.assertEqual(donor["last_updated"], dispatched_at.isoformat())
+        self.assertEqual(self.decide(ticket).status_code, 409)
+        self.assertEqual(self.client.get("/inventory").json()["clinics"]["Amman_East"]["inventory"]["Salbutamol_Inhaler"], target)
+        received_at = dispatched_at + timedelta(hours=2)
+        with patch.object(inventory_store, "utc_now", return_value=received_at):
+            self.assertEqual(self.client.post("/receive", json={"clinic_id": "Amman_East", "drug": "Salbutamol_Inhaler"}).status_code, 200)
+        received = inventory_store.read_inventory()["clinics"]["Amman_East"]["inventory"]["Salbutamol_Inhaler"]
+        self.assertEqual(received["quantity"], 45)
+        self.assertEqual(received["in_transit"], 0)
+        self.assertEqual(received["inbound_shipments"], [])
+        self.assertEqual(received["last_updated"], received_at.isoformat())
+
+    def test_multiple_manual_shipments_keep_their_own_cross_governorate_etas(self):
+        inventory_store.update_inventory(lambda data: data["clinics"]["Amman_Main"].update(location="Mafraq"))
+        parsed = json.dumps({"intent": "manual", "donor_clinic": "Amman_Main", "target_clinic": "Amman_East", "drug": "Salbutamol_Inhaler", "quantity": 20})
+        first_time = datetime(2026, 10, 3, 10, 0, tzinfo=timezone.utc)
+        for dispatched_at in [first_time, first_time + timedelta(minutes=10)]:
+            with patch.object(agent, "current_llm", return_value=SimpleNamespace(invoke=lambda _: SimpleNamespace(content=parsed))):
+                ticket = self.client.post("/chat", json={"message": "Transfer 20 inhalers"}).json()
+            with patch.object(agent, "utc_now", return_value=dispatched_at):
+                self.assertEqual(self.decide(ticket["session_id"]).status_code, 200)
+        target = self.client.get("/inventory").json()["clinics"]["Amman_East"]["inventory"]["Salbutamol_Inhaler"]
+        self.assertEqual(target["in_transit"], 40)
+        self.assertEqual([shipment["eta"] for shipment in target["inbound_shipments"]], [
+            (first_time + timedelta(hours=3)).isoformat(),
+            (first_time + timedelta(hours=3, minutes=10)).isoformat(),
+        ])
+        self.client.post("/receive", json={"clinic_id": "Amman_East", "drug": "Salbutamol_Inhaler"})
+        received = inventory_store.read_inventory()["clinics"]["Amman_East"]["inventory"]["Salbutamol_Inhaler"]
+        self.assertEqual(received["quantity"], 72)
+        self.assertEqual(received["inbound_shipments"], [])
+
+    def test_failed_approval_does_not_record_a_shipment_or_change_timestamps(self):
+        self.client.post("/demo/consume", json={"clinic_id": "Amman_East", "drug": "Salbutamol_Inhaler"})
+        ticket = self.scan().json()["session_id"]
+        inventory_store.update_inventory(lambda data: data["clinics"]["Amman_Main"]["inventory"]["Salbutamol_Inhaler"].update(quantity=50))
+        original = self.db_path.read_text(encoding="utf-8")
+        self.assertIn("not dispatched", self.decide(ticket).json()["text"])
+        self.assertEqual(self.db_path.read_text(encoding="utf-8"), original)
+        target = inventory_store.read_inventory()["clinics"]["Amman_East"]["inventory"]["Salbutamol_Inhaler"]
+        self.assertEqual(target["inbound_shipments"], [])
 
     def test_warning_to_receipt_without_touching_other_stockout(self):
         self.assertFalse(self.scan().json()["is_parked"])

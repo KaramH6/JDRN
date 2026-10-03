@@ -9,7 +9,8 @@ from langchain_ollama import ChatOllama # type: ignore
 from langchain_core.messages import HumanMessage, SystemMessage # type: ignore
 
 from inventory_logic import DONOR_RESERVE, collect_alerts, propose_transfers, validate_transfer
-from inventory_store import read_inventory, update_inventory
+from inventory_store import read_inventory, update_inventory, utc_now
+from delivery_tracking import record_inbound_shipment
 from ollama_setup import OLLAMA_MODEL, get_ollama_url, probe_ollama
 
 class AgentState(TypedDict):
@@ -519,6 +520,7 @@ def execute_transfer(state: AgentState) -> AgentState:
     def dispatch(inventory):
         # Validate the entire batch before changing any item.
         preview = deepcopy(inventory)
+        dispatched_at = utc_now()
         for plan in plans:
             problem = validate_transfer(preview, plan)
             if problem:
@@ -527,6 +529,7 @@ def execute_transfer(state: AgentState) -> AgentState:
             recipient = preview["clinics"][plan["to"]]["inventory"][plan["drug"]]
             donor["quantity"] -= plan["quantity_to_move"]
             recipient["in_transit"] = recipient.get("in_transit", 0) + plan["quantity_to_move"]
+            record_inbound_shipment(preview, plan, dispatched_at)
         inventory["clinics"] = preview["clinics"]
 
     try:

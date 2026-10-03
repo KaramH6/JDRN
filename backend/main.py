@@ -233,6 +233,7 @@ async def receive_shipment(req: ReceiveRequest):
             raise HTTPException(status_code=409, detail="No inbound shipment to receive")
         stock["quantity"] = stock.get("quantity", 0) + in_transit
         stock["in_transit"] = 0
+        stock["inbound_shipments"] = []
         return {"status": "success", "quantity": stock["quantity"]}
     return update_inventory(receive)
 

@@ -25,7 +25,7 @@
           "expiry": "2027-12-31"
         },
         "Salbutamol_Inhaler": {
-          "quantity": 270,
+          "quantity": 152,
           "in_transit": 0,
           "expiry": "2027-12-31"
         },
@@ -97,7 +97,7 @@
           "expiry": "2027-12-31"
         },
         "Salbutamol_Inhaler": {
-          "quantity": 32,
+          "quantity": 45,
           "in_transit": 0,
           "expiry": "2027-12-31"
         },
@@ -169,7 +169,7 @@
           "expiry": "2027-12-31"
         },
         "Salbutamol_Inhaler": {
-          "quantity": 320,
+          "quantity": 291,
           "in_transit": 0,
           "expiry": "2027-12-31"
         },
@@ -205,7 +205,7 @@
           "expiry": "2027-12-31"
         },
         "Salbutamol_Inhaler": {
-          "quantity": 61,
+          "quantity": 45,
           "in_transit": 0,
           "expiry": "2027-12-31"
         },
@@ -308,7 +308,7 @@
           "expiry": "2027-12-31"
         },
         "Paracetamol": {
-          "quantity": 300,
+          "quantity": 255,
           "in_transit": 0,
           "expiry": "2027-12-31"
         },
@@ -380,7 +380,7 @@
           "expiry": "2027-12-31"
         },
         "Paracetamol": {
-          "quantity": 65,
+          "quantity": 45,
           "in_transit": 0,
           "expiry": "2027-12-31"
         },

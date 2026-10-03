@@ -4,10 +4,10 @@ JDRN is a local hackathon MVP for spotting medicine shortages at clinics and pre
 
 ## What the demo shows
 
-1. The dashboard reads `data/inventory.json` every five seconds. A branch with **1–30 units** is **At risk**; a branch with **0 units** is **Out of stock**. Inbound stock remains separate until received.
+1. The dashboard reads `data/inventory.json` every five seconds. A branch with **1–30 units** is **At risk**; a branch with **0 units** is **Out of stock**. Each medicine shows its last stock-record update in Amman time. Existing records without a timestamp show **Not recorded** until changed. Inbound stock remains separate until received.
 2. Select **Amman East** and **Salbutamol Inhaler** in Demo mode. Use **Restock selected** if you need a fresh run; this pair resets to 32 units. Start the simulation. One 15-unit step leaves 17 units and pauses with an early warning.
 3. Choose **Review transfer** on that alert. The focused scan checks live inventory and proposes a donor, transfer quantity, donor balance after dispatch, and a short reason. Focused scans do not require Ollama.
-4. Approve or reject the ticket. Approval checks current inventory again, deducts donor stock, and records the quantity as inbound at the recipient. The same ticket cannot dispatch twice.
+4. Approve or reject the ticket. Approval checks current inventory again, deducts donor stock, and records the quantity as inbound at the recipient. Each inbound transfer shows a **Demo ETA** and time remaining: one hour within the same governorate, three hours between governorates. These are simulated delivery assumptions. The same ticket cannot dispatch twice.
 5. Return to the dashboard and click **INBOUND** to record receipt. The quantity moves into on-hand stock and the warning clears if stock rises above 30.
 
 The terminal's **Scan for shortages in all branches** command runs without Ollama. Natural-language transfer requests use a local Ollama `llama3.2` model.
@@ -19,6 +19,14 @@ The terminal's **Scan for shortages in all branches** command runs without Ollam
 - Every donor must retain at least 50 on-hand units after dispatch. If no donor can do that, the system explains why it cannot propose a transfer. Existing inbound stock is counted to avoid repeat proposals.
 - A dispatcher must approve a proposal. Approval rechecks latest inventory; a stale or unsafe ticket is declined. Rejection leaves inventory unchanged.
 - Manual terminal transfers use the same 50-unit donor reserve.
+
+## Stock timestamps and inbound estimates
+
+`last_updated` records when a medicine's stock record last changed through the backend (consumption, restock, dispatch, or receipt). Reads and dashboard refreshes do not change it; it is not proof of a physical stock count. Dates are stored as UTC ISO timestamps and shown in `Asia/Amman` time.
+
+`inbound_shipments` stores each approved transfer's donor, quantity, dispatch time, ETA, and `demo` estimate label. Separate transfers keep separate estimates. When an estimate passes, the dashboard says **Awaiting receipt**; medicine is never automatically added to on-hand stock. The existing **INBOUND** action confirms receipt of all inbound units for that medicine and clears its estimates. Older inbound stock without shipment details shows **ETA not recorded**.
+
+The one/three-hour assumptions are constants in `backend/delivery_tracking.py`, not measured route times or courier data. A production ETA needs logistics input. Direct edits to the JSON file bypass backend timestamp tracking.
 
 ## Run locally
 
@@ -67,10 +75,11 @@ From the project root:
 ```powershell
 python -B -m unittest discover -s backend/tests -v
 node --check frontend/renderer.js
+node --test --test-isolation=none frontend/tests/tracking.test.cjs
 ```
 
 The tests use isolated inventory files; they do not change `data/inventory.json`.
 
 ## MVP boundary
 
-The current warning is a stock threshold, not a validated burn-rate forecast. The system does not estimate travel time, inspect medicine expiry when routing, authenticate dispatchers, or integrate with Hakeem. Those need real operational data and a production design. See `changes.md` for the feature rationale and its business-to-technical mapping.
+The current warning is a stock threshold, not a validated burn-rate forecast. Delivery ETAs use labelled demo assumptions; the system does not measure travel time, inspect medicine expiry when routing, authenticate dispatchers, or integrate with Hakeem. Those need real operational data and a production design. See `changes.md` for the earlier feature rationale and `changes-final-mvp-tracking.md` for the final tracking changes and revised Task 2 paragraph.

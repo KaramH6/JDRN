@@ -189,7 +189,8 @@ async function loadDashboardData() {
         branchSelect.replaceChildren(...branches.map(([id]) => new Option(id.replace(/_/g, ' '), id)));
         branchSelect.value = branches.some(([id]) => id === selectedBranch) ? selectedBranch : (branches.some(([id]) => id === 'Amman_East') ? 'Amman_East' : branches[0]?.[0] || '');
         updateDemoMedicines();
-        const version = JSON.stringify(data.clinics);
+        // Refresh ETA countdowns even when the inventory itself has not changed.
+        const version = JSON.stringify(data.clinics) + Math.floor(Date.now() / 60000);
         if (version === lastInventoryVersion) return;
         lastInventoryVersion = version;
         const groups = {};
@@ -222,11 +223,17 @@ async function loadDashboardData() {
                         : '';
                         
                     inventoryHtml += `
-                        <div class="flex justify-between items-center py-3 border-t border-black/10">
-                            <span class="text-sm font-medium ${isCritical ? 'text-alert font-bold' : isAtRisk ? 'text-transit font-bold' : ''}">${escapeHtml(drug.replace(/_/g, ' '))}</span>
-                            <div class="flex items-center">
+                        <div class="flex justify-between items-start gap-3 py-3 border-t border-black/10">
+                            <div>
+                                <span class="text-sm font-medium ${isCritical ? 'text-alert font-bold' : isAtRisk ? 'text-transit font-bold' : ''}">${escapeHtml(drug.replace(/_/g, ' '))}</span>
+                                <p class="text-[10px] font-mono text-black/60 mt-1">Last updated: ${escapeHtml(formatStockTime(details.last_updated))}</p>
+                            </div>
+                            <div class="text-right">
+                              <div class="flex items-center justify-end">
                                 <span class="font-mono text-sm ${isCritical ? 'bg-alert text-white px-2 py-0.5' : isAtRisk ? 'bg-transit text-white px-2 py-0.5' : ''}">${details.quantity}</span>
                                 ${inTransitBadge}
+                              </div>
+                              ${renderInboundEstimates(details)}
                             </div>
                         </div>
                     `;
@@ -249,6 +256,34 @@ async function loadDashboardData() {
         document.getElementById('backend-status').textContent = 'Backend offline';
         grid.innerHTML = `<div class="col-span-full font-mono text-alert uppercase border border-alert p-6 text-center">Connection Error: Uvicorn Offline</div>`;
     }
+}
+
+function formatStockTime(value) {
+    if (!value) return 'Not recorded';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return 'Not recorded';
+    return new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Asia/Amman', day: '2-digit', month: 'short', year: 'numeric',
+        hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
+    }).format(date) + ' (Amman)';
+}
+
+function renderInboundEstimates(stock) {
+    if (!(stock.in_transit > 0)) return '';
+    let trackedQuantity = 0;
+    const rows = (stock.inbound_shipments || []).map(shipment => {
+        trackedQuantity += shipment.quantity;
+        const eta = new Date(shipment.eta).getTime();
+        const remaining = Math.ceil((eta - Date.now()) / 60000);
+        const status = !shipment.eta || !Number.isFinite(eta) ? 'ETA not recorded' :
+            remaining > 0 ? `Demo ETA: ${formatStockTime(shipment.eta)} · in ${remaining} min` :
+            `Awaiting receipt · demo ETA passed: ${formatStockTime(shipment.eta)}`;
+        return `<p class="text-[10px] font-mono text-black/60 mt-1">${escapeHtml(shipment.quantity)} units from ${escapeHtml((shipment.from || '').replace(/_/g, ' '))}<br>${escapeHtml(status)}</p>`;
+    });
+    if (trackedQuantity < stock.in_transit) {
+        rows.push(`<p class="text-[10px] font-mono text-black/60 mt-1">${escapeHtml(stock.in_transit - trackedQuantity)} inbound units · ETA not recorded</p>`);
+    }
+    return rows.join('');
 }
 
 window.receiveShipment = async function(clinicId, drug) {
